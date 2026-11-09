@@ -1,0 +1,521 @@
+"""Durable observation-level orchestration shared by local and LSF execution."""
+
+from __future__ import annotations
+
+import math
+import os
+from pathlib import Path
+import sys
+import time
+import uuid
+
+from .config import RunConfig, SiteConfig
+from .errors import IntegrityError, PreparationError, ReconciliationError
+from .eligibility import _validation_verified
+from .executors.local import LocalExecutor
+from .executors.lsf import LSFExecutor
+from .identity import atomic_write_json, canonical_hash, file_hash, read_json, harness_identity
+from .journal import Journal
+from .pilot import inventory, worker_capacity
+from .schema import TERMINAL, PROTOCOLS, validate_record
+from .store import Lease, Store, publish_bundle, verify_bundle
+
+
+def work_key(spec):
+    # Equal source builds still require independent real A/A measurements.
+    return f"{spec.get('arm', 'task')}-{spec['observation_id']}"
+
+
+def read_results(root, *, phase="comparison"):
+    results = []
+    folder = Path(root) / ("observations" if phase == "comparison" else f"{phase}/observations")
+    if folder.exists():
+        for path in sorted(folder.iterdir()):
+            if not path.is_dir() or path.name.startswith("."):
+                continue
+            bundle = verify_bundle(path)
+            if bundle is not None:
+                results.append(bundle["record"])
+    return results
+
+
+def verify_plan(root, *, check_harness=True):
+    root = Path(root)
+    plan = read_json(root / "plan.json")
+    validate_record("RunPlan", plan)
+    claimed = plan["plan_hash"]
+    actual = canonical_hash({key: value for key, value in plan.items() if key != "plan_hash"})
+    if claimed != actual or (root / "plan.sha256").read_text().strip() != claimed:
+        raise IntegrityError("Frozen plan identity mismatch")
+    if check_harness and (plan.get("protocols") != PROTOCOLS or plan.get("coordinator_hash") != harness_identity()):
+        raise IntegrityError("Frozen worker protocols or coordinator implementation changed; use a new run")
+    for relative, digest in plan.get("artifact_hashes", {}).items():
+        path = (root / relative).resolve()
+        if not path.is_relative_to(root.resolve()) or file_hash(path) != digest:
+            raise IntegrityError(f"Frozen artifact changed: {relative}")
+    return plan
+
+
+class ExecutionEngine:
+    def __init__(self, root, config: RunConfig, lease: Lease, *, executor=None, plan_hash=None):
+        self.root = Path(root).resolve()
+        self.config = config
+        self.lease = lease
+        self.journal = Journal(self.root / "state/events.jsonl", lease=lease)
+        self.store = Store(config.store)
+        self.site = SiteConfig.read(config.lsf_config) if config.executor == "lsf" else None
+        self.executor = executor or (LSFExecutor(self.site) if self.site else LocalExecutor())
+        self.plan_hash = plan_hash
+        self.resources = (inventory(cpu_budget=config.cpu_budget, memory_gb=config.memory_gb)
+                          if self.site is None else {
+                              "usable_cpus": self.site.max_cpus,
+                              "worker_memory_budget_bytes": int(self.site.max_memory_gb * 1024 ** 3)})
+        self.maximum_jobs = (self.site.max_jobs if self.site else
+                             int(config.workers) if config.workers != "auto" else 1_000_000)
+        self.poll_interval = self.site.poll_seconds if self.site else .1
+
+    def state(self, status, **details):
+        self.journal.append("run_state", {"status": status, **details})
+        with self.lease.fenced():
+            atomic_write_json(self.root / "state/status.json", {"schema_version": 1,
+                              "status": status, "updated_at": time.time(), **details})
+
+    def _result_path(self, spec):
+        phase = spec.get("phase", "tasks")
+        return self.root / ("observations" if phase == "comparison" else f"{phase}/observations") / work_key(spec)
+
+    def _existing(self, spec):
+        bundle = verify_bundle(self._result_path(spec))
+        if bundle is not None:
+            self._check_identity(spec, bundle["record"])
+            return bundle["record"]
+        if spec.get("arm") == "baseline" and spec.get("task", "observation") == "observation":
+            cached = self.store.get("baseline/observations", spec["observation_id"])
+            if cached is not None:
+                record = cached["record"]
+                self._check_identity(spec, record)
+                if not _validation_verified(record) or record["status"] != "SUCCEEDED":
+                    raise IntegrityError("Unverified baseline cache entry")
+                source = self.store.path("baseline/observations", spec["observation_id"])
+                artifacts = {name: source / name for name in cached["artifacts"]}
+                record = {**record, "cache_hit": True, "cache_key": spec["observation_id"],
+                          "cache_manifest_hash": file_hash(source / "manifest.json")}
+                publish_bundle(self._result_path(spec), record, artifacts, lease=self.lease)
+                self.journal.append("cache_hit", {"work_key": work_key(spec)})
+                return record
+        return None
+
+    @staticmethod
+    def _check_identity(spec, result, *, attempt=None):
+        if not isinstance(result, dict):
+            raise IntegrityError("Receipt must be an object")
+        fields = ("observation_id", "case_id", "arm", "seed", "phase", "build_id")
+        for key in fields:
+            if key in spec and result.get(key) != spec[key]:
+                raise IntegrityError(f"Receipt {key} mismatch for {work_key(spec)}")
+        if attempt is not None:
+            for key in ("attempt_id", "plan_hash", "lease_generation", "run_id", "submission_token"):
+                if key in attempt["spec"] and result.get(key) != attempt["spec"][key]:
+                    raise IntegrityError(f"Receipt {key} mismatch")
+        for key in ("runtime_profile", "protocols"):
+            if spec.get("task", "observation") == "observation" and result.get(key) != spec.get(key):
+                raise IntegrityError(f"Receipt {key} mismatch")
+        if result.get("status") not in TERMINAL:
+            raise IntegrityError(f"Receipt has nonterminal or unknown status: {result.get('status')}")
+        if spec.get("task", "observation") == "observation":
+            validate_record("ObservationResult", result)
+
+    def _attempts(self, spec):
+        parent = self.root / "attempts" / work_key(spec)
+        return [read_json(path) for path in sorted(parent.glob("*/attempt.json"))]
+
+    def _save_attempt(self, attempt):
+        with self.lease.fenced():
+            atomic_write_json(Path(attempt["directory"]) / "attempt.json", attempt)
+
+    def _new_attempt(self, spec, *, token=None, shard_directory=None):
+        attempt_id = uuid.uuid4().hex
+        token = token or uuid.uuid4().hex
+        directory = self.root / "attempts" / work_key(spec) / attempt_id
+        run_spec = {**spec, "attempt_id": attempt_id, "output_dir": str(directory),
+                    "plan_hash": self.plan_hash, "lease_generation": self.lease.generation,
+                    "run_id": canonical_hash(str(self.root)), "submission_token": token}
+        attempt = {"schema_version": 1, "observation_id": spec["observation_id"],
+                   "attempt_id": attempt_id, "submission_token": token, "status": "SUBMITTING",
+                   "created_at": time.time(), "directory": str(directory), "spec": run_spec}
+        if shard_directory is not None:
+            attempt["shard_directory"] = str(shard_directory)
+        self._save_attempt(attempt)
+        atomic_write_json(directory / "spec.json", run_spec)
+        self.journal.append("submission_intent", {"work_key": work_key(spec), "attempt_id": attempt_id,
+                                                 "submission_token": token})
+        return attempt
+
+    @staticmethod
+    def _command(spec, directory):
+        return spec.get("command") or [spec.get("python", sys.executable), "-m",
+                    "benchpress_compare.worker" if spec.get("task", "observation") in
+                    {"observation", "freeze-fixture", "freeze-targets", "validate-import"}
+                    else "benchpress_compare.tasks", str(directory / "spec.json")]
+
+    def _launch(self, spec):
+        attempt = self._new_attempt(spec)
+        token, directory = attempt["submission_token"], Path(attempt["directory"])
+        command = self._command(spec, directory)
+        job = self.executor.submit(command, directory, spec["runtime_profile"],
+                                   name=f"bpc-{canonical_hash(str(self.root))[:8]}-{token}", token=token)
+        attempt.update(job=job, status=job["status"])
+        self._save_attempt(attempt)
+        self.journal.append("submitted", {"work_key": work_key(spec), "attempt_id": attempt["attempt_id"],
+                                           "job": job})
+        return attempt
+
+    def _launch_bundle(self, specs, bundle):
+        token = uuid.uuid4().hex
+        directory = self.root / "jobs/shards" / token
+        attempts = [self._new_attempt(spec, token=token, shard_directory=directory) for spec in specs]
+        profile = dict(specs[0]["runtime_profile"])
+        if any(spec["runtime_profile"] != profile for spec in specs):
+            raise IntegrityError("A shard mixes incompatible observation resource profiles")
+        profile["wall_seconds"] = min(self.site.job_wall_seconds, max(
+            profile["wall_seconds"], math.ceil(bundle["estimated_seconds"] / .9)))
+        manifest = {"schema_version": 1, "submission_token": token, "plan_hash": self.plan_hash,
+                    "entries": [{"spec_path": str(Path(attempt["directory"]) / "spec.json"),
+                                 "spec_hash": file_hash(Path(attempt["directory"]) / "spec.json"),
+                                 "command": self._command(spec, Path(attempt["directory"]))}
+                                for spec, attempt in zip(specs, attempts)]}
+        atomic_write_json(directory / "shard.json", manifest)
+        command = [sys.executable, "-m", "benchpress_compare.worker.shard", str(directory / "shard.json")]
+        job = self.executor.submit(command, directory, profile,
+                                   name=f"bpc-{canonical_hash(str(self.root))[:8]}-{token}", token=token)
+        job.update(shard=True, shard_manifest=str(directory / "shard.json"),
+                   shard_manifest_hash=file_hash(directory / "shard.json"))
+        # The common job belongs to all of these authorized attempts. A restart
+        # can adopt the shared job even if it crashed between these writes.
+        atomic_write_json(directory / "job.json", job)
+        for spec, attempt in zip(specs, attempts):
+            attempt.update(job=job, status=job["status"])
+            self._save_attempt(attempt)
+            self.journal.append("submitted", {"work_key": work_key(spec),
+                "attempt_id": attempt["attempt_id"], "job": job, "bundle_id": bundle.get("bundle_id")})
+        return attempts
+
+    def _adopt(self, spec, attempts):
+        live = [a for a in attempts if a["status"] not in TERMINAL | {"INTERRUPTED", "SUPERSEDED"}]
+        if len(live) > 1:
+            raise ReconciliationError(f"Multiple current attempts for {work_key(spec)}")
+        if not live:
+            return None
+        attempt = live[0]
+        if "job" not in attempt:
+            job_path = Path(attempt.get("shard_directory", attempt["directory"])) / "job.json"
+            if job_path.exists():
+                attempt["job"] = read_json(job_path)
+                if attempt.get("shard_directory"):
+                    attempt["job"]["shard"] = True
+            else:
+                # Crash between intent and response: never speculate that no job exists.
+                attempt["job"] = {"schema_version": 1, "executor": self.config.executor,
+                                  "status": "SUBMISSION_UNKNOWN", "token": attempt["submission_token"],
+                                  "name": f"bpc-{canonical_hash(str(self.root))[:8]}-{attempt['submission_token']}",
+                                  "submitted_at": attempt["created_at"],
+                                  "attempt_dir": attempt.get("shard_directory", attempt["directory"]),
+                                  "runtime_profile": spec["runtime_profile"], "peak_rss_bytes": 0}
+        self.journal.append("attempt_adopted", {"attempt_id": attempt["attempt_id"],
+                                                "original_generation": attempt["spec"]["lease_generation"]})
+        return attempt
+
+    def _commit(self, spec, attempt, result):
+        self._check_identity(spec, result, attempt=attempt if result.get("attempt_id") else None)
+        directory = Path(attempt["directory"])
+        artifacts = {}
+        for name, digest in result.get("artifacts", {}).items():
+            path = (directory / name).resolve()
+            if not path.is_relative_to(directory.resolve()) or file_hash(path) != digest:
+                raise IntegrityError(f"Receipt artifact mismatch: {name}")
+            artifacts[name] = path
+        resources = result.setdefault("resources", {})
+        job = attempt.get("job", {})
+        resources["peak_rss_bytes"] = max(resources.get("peak_rss_bytes", 0), job.get("peak_rss_bytes", 0))
+        resources["elapsed_seconds"] = max(resources.get("elapsed_seconds", 0), job.get("elapsed_seconds", 0))
+        result.update(accepted_attempt=attempt["attempt_id"], runtime_profile=spec["runtime_profile"],
+                      protocols=spec.get("protocols"), cache_hit=False)
+        if (result["status"] == "SUCCEEDED" and spec.get("task", "observation") == "observation"
+                and not _validation_verified(result)):
+            raise IntegrityError("Successful observation lacks required validation")
+        result["validation_status"] = result.get("validation", {}).get("status")
+        publish_bundle(self._result_path(spec), result, artifacts, lease=self.lease)
+        if result.get("arm") == "baseline" and result["status"] == "SUCCEEDED" and result.get("validation_status") == "verified":
+            # Reusable store bundles own copies of every referenced artifact.
+            existing = self.store.get("baseline/observations", spec["observation_id"])
+            if existing is None:
+                self.store.publish("baseline/observations", spec["observation_id"], result, artifacts)
+            elif any(existing["record"].get(key) != result.get(key) for key in ("N2", "D2")):
+                raise IntegrityError("Conflicting baseline result for immutable observation")
+        attempt["status"] = result["status"]
+        self._save_attempt(attempt)
+        self.journal.append("result_committed", {"work_key": work_key(spec), "status": result["status"],
+                                                "attempt_id": attempt["attempt_id"]})
+        return result
+
+    def _failed_result(self, spec, attempt, status, reason):
+        return {**{key: spec[key] for key in ("observation_id", "case_id", "arm", "phase", "seed", "build_id") if key in spec},
+                "schema_version": 1, "status": status, "N2": None, "D2": None, "reason": reason,
+                "attempt_id": attempt["attempt_id"], "plan_hash": attempt["spec"]["plan_hash"],
+                "lease_generation": attempt["spec"]["lease_generation"],
+                "runtime_profile": spec["runtime_profile"], "protocols": spec.get("protocols"),
+                **{key: attempt["spec"][key] for key in ("run_id", "submission_token") if key in attempt["spec"]}}
+
+    def run(self, specs, *, retry_cancelled=False, bundles=None):
+        specs = list(specs)
+        keys = [work_key(spec) for spec in specs]
+        if len(keys) != len(set(keys)):
+            raise IntegrityError("Duplicate planned work")
+        profiles = {canonical_hash(spec["runtime_profile"]): spec["runtime_profile"] for spec in specs}
+        if self.site is None and self.config.workers != "auto" and len(profiles) == 1:
+            worker_capacity(self.resources, next(iter(profiles.values())), len(specs), self.config.workers)
+        bundle_by_key = {}
+        if self.site is not None:
+            if bundles is None:
+                # Preparation uses the same protocol. Pair/group only cases
+                # that fit conservatively; build and fixture tasks stay separate.
+                grouped = {}
+                for spec in specs:
+                    if spec.get("task", "observation") == "observation":
+                        key = (spec["case_id"], canonical_hash(spec["runtime_profile"]))
+                        grouped.setdefault(key, []).append(spec)
+                bundles = []
+                for rows in grouped.values():
+                    size = max(1, int((self.site.job_wall_seconds - 10) // rows[0]["runtime_profile"]["wall_seconds"]))
+                    for offset in range(0, len(rows), size):
+                        part = rows[offset:offset + size]
+                        bundles.append({"observations": part, "estimated_seconds": 10 + sum(row["runtime_profile"]["wall_seconds"] for row in part)})
+            expected = {work_key(spec): spec for spec in specs}
+            for bundle in bundles:
+                for spec in bundle["observations"]:
+                    key = work_key(spec)
+                    if key in bundle_by_key or key not in expected or spec != expected[key]:
+                        raise IntegrityError("Shard plan duplicates or changes frozen observations")
+                    bundle_by_key[key] = bundle
+        active, pending, results = {}, [], {}
+        for spec in specs:
+            key = work_key(spec)
+            existing = self._existing(spec)
+            if existing:
+                if existing["status"] == "CANCELLED" and retry_cancelled:
+                    # Keep the old immutable receipt as history; reopening is explicit.
+                    old = self._result_path(spec)
+                    with self.lease.fenced():
+                        os.rename(old, old.with_name("." + old.name + ".cancelled." + uuid.uuid4().hex))
+                    self.journal.append("cancelled_work_reopened", {"work_key": key})
+                else:
+                    results[key] = existing
+                    continue
+            attempts = self._attempts(spec)
+            adopted = self._adopt(spec, attempts)
+            if adopted:
+                active[key] = (spec, adopted)
+            else:
+                # A controller can die after recording a failed attempt but
+                # before publishing the terminal result. Persisted attempts,
+                # rather than a fresh controller's loop, define the retry budget.
+                failed = [attempt for attempt in attempts if attempt["status"] == "INFRA_FAILED"]
+                if len(failed) > self.config.infrastructure_retries:
+                    attempt = max(failed, key=lambda value: value["created_at"])
+                    result = self._failed_result(spec, attempt, "INFRA_FAILED", "infrastructure_retries_exhausted")
+                    results[key] = self._commit(spec, attempt, result)
+                else:
+                    pending.append(spec)
+        try:
+            while pending or active:
+                self.lease.assert_owned()
+                if (self.root / "state/cancel-request.json").exists():
+                    cancelled_jobs = {}
+                    for key, (spec, attempt) in list(active.items()):
+                        if not attempt.get("cancel_requested"):
+                            token = attempt["job"]["token"]
+                            if token not in cancelled_jobs:
+                                cancelled_jobs[token] = self.executor.cancel(attempt["job"])
+                            attempt["job"] = cancelled_jobs[token]
+                            attempt["cancel_requested"] = True
+                            self._save_attempt(attempt)
+                    for spec in pending:
+                        attempt = {"attempt_id": "cancelled-before-launch", "directory": str(self.root),
+                                   "spec": {"plan_hash": self.plan_hash, "lease_generation": self.lease.generation}}
+                        # Cancellation before submission needs no process or fabricated attempt.
+                        result = self._failed_result(spec, attempt, "CANCELLED", "user_cancelled")
+                        publish_bundle(self._result_path(spec), result, lease=self.lease)
+                        results[work_key(spec)] = result
+                    pending.clear()
+                owned_jobs = {attempt["job"]["token"]: spec for spec, attempt in active.values()}
+                used_cpu = sum(spec["runtime_profile"]["native_threads"] for spec in owned_jobs.values())
+                used_memory = sum(spec["runtime_profile"]["memory_bytes"] for spec in owned_jobs.values())
+                job_count = len(owned_jobs)
+                for spec in list(pending):
+                    if spec not in pending:
+                        continue
+                    profile = spec["runtime_profile"]
+                    if profile["native_threads"] > self.resources["usable_cpus"] or profile["memory_bytes"] > self.resources["worker_memory_budget_bytes"]:
+                        raise PreparationError(f"Zero capacity for observation {work_key(spec)}: {profile}")
+                    if (job_count < self.maximum_jobs and
+                            used_cpu + profile["native_threads"] <= self.resources["usable_cpus"] and
+                            used_memory + profile["memory_bytes"] <= self.resources["worker_memory_budget_bytes"]):
+                        bundle = bundle_by_key.get(work_key(spec))
+                        selected = ([row for row in bundle["observations"] if row in pending]
+                                    if bundle else [spec])
+                        attempts = self._launch_bundle(selected, bundle) if bundle else [self._launch(spec)]
+                        for row, attempt in zip(selected, attempts):
+                            active[work_key(row)] = (row, attempt)
+                            pending.remove(row)
+                        job_count += 1
+                        used_cpu += profile["native_threads"]
+                        used_memory += profile["memory_bytes"]
+                uncertain = []
+                polled_jobs = {}
+                harness_failures = []
+                for key, (spec, attempt) in list(active.items()):
+                    token = attempt["job"]["token"]
+                    if token not in polled_jobs:
+                        polled_jobs[token] = self.executor.poll(attempt["job"])
+                    job = dict(polled_jobs[token])
+                    attempt.update(job=job, status=job["status"])
+                    self._save_attempt(attempt)
+                    if job["status"] in {"NEEDS_RECONCILIATION", "SUBMISSION_UNKNOWN"}:
+                        if job["status"] == "NEEDS_RECONCILIATION" or self.site is None:
+                            uncertain.append(key)
+                        continue
+                    if job["status"] not in {"DONE", "EXIT", "INFRA_FAILED", "RESOURCE_LIMIT", "CANCELLED"}:
+                        continue
+                    receipt = Path(attempt["directory"]) / "receipt.json"
+                    supervisor_path = Path(attempt["directory"]) / "supervisor.json"
+                    supervisor = read_json(supervisor_path) if supervisor_path.exists() else None
+                    if supervisor is not None:
+                        for field in ("attempt_id", "observation_id", "submission_token"):
+                            if supervisor.get(field) != attempt["spec"][field]:
+                                raise IntegrityError(f"Shard supervisor {field} mismatch")
+                        job.update(supervisor["resources"])
+                        job["return_code"] = supervisor.get("return_code")
+                        attempt["job"] = job
+                    if supervisor and supervisor["status"] in {"RESOURCE_LIMIT", "CANCELLED", "INFRA_FAILED", "HARNESS_FAILED"}:
+                        result = self._failed_result(spec, attempt, supervisor["status"], supervisor.get("reason"))
+                    elif job["status"] == "RESOURCE_LIMIT":
+                        result = self._failed_result(spec, attempt, "RESOURCE_LIMIT", job.get("reason"))
+                    elif receipt.exists():
+                        try:
+                            result = read_json(receipt)
+                            if not isinstance(result, dict):
+                                raise ValueError("Receipt must be an object")
+                            if result.get("schema_version") != 1 or result.get("status") not in TERMINAL:
+                                raise ValueError("Receipt schema or terminal status is invalid")
+                            if spec.get("task", "observation") == "observation":
+                                validate_record("ObservationResult", result)
+                                if any(field not in result for field in ("runtime_profile", "protocols")):
+                                    raise ValueError("Observation receipt lacks runtime/protocol identity")
+                                if result["status"] == "SUCCEEDED" and any(field not in result for field in ("N2", "D2")):
+                                    raise ValueError("Successful observation lacks metric fields")
+                            if not isinstance(result.get("artifacts", {}), dict):
+                                raise ValueError("Receipt artifact manifest must be an object")
+                        except (ValueError, UnicodeDecodeError, IntegrityError) as exc:
+                            result = self._failed_result(spec, attempt, "INVALID", f"malformed_receipt: {exc}")
+                            result["artifacts"] = {"receipt.json": file_hash(receipt)}
+                        else:
+                            self._check_identity(spec, result, attempt=attempt)
+                    elif attempt.get("cancel_requested") or job["status"] == "CANCELLED":
+                        result = self._failed_result(spec, attempt, "CANCELLED", "user_cancelled")
+                    elif job.get("return_code") in {-6, -11}:
+                        result = self._failed_result(spec, attempt, "COMPILER_FAILED", "native_crash")
+                    elif job["status"] == "INFRA_FAILED":
+                        result = self._failed_result(spec, attempt, "INFRA_FAILED", job.get("reason", "confirmed_infrastructure_failure"))
+                    else:
+                        # An unexplained process exit is not evidence of node
+                        # eviction or transient infrastructure. Retrying it can
+                        # otherwise hide a compiler crash behind a second sample.
+                        result = self._failed_result(spec, attempt, "HARNESS_FAILED", "terminal_worker_without_receipt")
+                    if result["status"] == "INFRA_FAILED":
+                        attempt["status"] = "INFRA_FAILED"
+                        self._save_attempt(attempt)
+                        count = sum(a["status"] == "INFRA_FAILED" for a in self._attempts(spec))
+                        if count <= self.config.infrastructure_retries:
+                            self.journal.append("infrastructure_retry", {"work_key": key, "attempt": count})
+                            pending.append(spec)
+                            del active[key]
+                            continue
+                    results[key] = self._commit(spec, attempt, result)
+                    del active[key]
+                    if result["status"] == "HARNESS_FAILED":
+                        harness_failures.append(result.get("reason", key))
+                if uncertain:
+                    self.state("NEEDS_RECONCILIATION", affected=uncertain)
+                    raise ReconciliationError("Uncertain owned jobs require reconciliation; no replacements submitted")
+                if harness_failures:
+                    raise PreparationError(f"Worker protocol incompatible: {harness_failures[0]}")
+                if active:
+                    time.sleep(min(self.poll_interval, 30))
+        except KeyboardInterrupt:
+            if self.site is None:
+                for spec, attempt in active.values():
+                    self.executor.cancel(attempt["job"])
+                    attempt["status"] = "INTERRUPTED"
+                    self._save_attempt(attempt)
+            self.state("INTERRUPTED")
+            raise
+        return [results[key] for key in keys]
+
+
+def collect(root, *, retry_cancelled=False):
+    root = Path(root).resolve()
+    plan = verify_plan(root)
+    config = RunConfig(**plan["config"])
+    from .builds import verify_build
+    for manifest in plan["builds"].values():
+        verify_build(Path(manifest["manifest_path"]).parent)
+    with Lease(root / "state/controller.lease") as lease:
+        engine = ExecutionEngine(root, config, lease, plan_hash=plan["plan_hash"])
+        engine.journal.replay()
+        if retry_cancelled:
+            with lease.fenced():
+                (root / "state/cancel-request.json").unlink(missing_ok=True)
+        engine.state("RUNNING")
+        results = engine.run(plan["observations"], retry_cancelled=retry_cancelled, bundles=plan.get("bundles"))
+        status = "COMPLETE" if all(row["status"] == "SUCCEEDED" for row in results) else "COMPLETE_WITH_FAILURES"
+        engine.state(status)
+        from .report import build_report, write_report
+        write_report(root, build_report(plan, results, status=status))
+        return status
+
+
+def status(root):
+    root = Path(root)
+    path = root / "state/status.json"
+    state = read_json(path) if path.exists() else {"schema_version": 1, "status": "NEW"}
+    if (root / "plan.json").exists():
+        plan = verify_plan(root, check_harness=False)
+        results = read_results(root)
+        state = {**state, "expected_observations": len(plan["observations"]),
+                 "completed_observations": len(results),
+                 "succeeded": sum(row["status"] == "SUCCEEDED" for row in results),
+                 "cache_hits": sum(bool(row.get("cache_hit")) for row in results)}
+    return state
+
+
+def cancel(root):
+    root = Path(root).resolve()
+    if not (root / "request.json").is_file():
+        raise PreparationError("Cannot cancel: results directory has no owned request.json")
+    atomic_write_json(root / "state/cancel-request.json", {"schema_version": 1, "requested_at": time.time()})
+    cancelled = []
+    owned = set()
+    for path in sorted((root / "attempts").glob("*/*/attempt.json")):
+        attempt = read_json(path)
+        if attempt["status"] in TERMINAL | {"INTERRUPTED", "SUPERSEDED"}:
+            continue
+        job = attempt.get("job")
+        if not job:
+            raise ReconciliationError("A submission intent needs reconciliation before cancellation")
+        if job["token"] in owned:
+            continue
+        executor = LocalExecutor() if job["executor"] == "local" else LSFExecutor(SiteConfig(**job["site"]))
+        executor.cancel(job)
+        owned.add(job["token"])
+        cancelled.append(job.get("job_id", job.get("pid")))
+    return {"schema_version": 1, "status": "CANCELLATION_REQUESTED", "jobs": cancelled}

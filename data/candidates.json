@@ -1,0 +1,2890 @@
+{
+  "schema_version": 1,
+  "revision": "4c04b38a53fc231a89f1a6bc9541c1b641ed6dcf",
+  "hamlib_sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+  "recipe_version": "native-corpus-v1",
+  "source": "docs/design/benchpress_subset_spec.md",
+  "candidates": [
+    {
+      "input_id": "Q/medium/qft_n18",
+      "declared_width": 18,
+      "family": "F1",
+      "band": "S",
+      "recipe": "QFT",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-medium/qft_n18/qft_n18.qasm",
+        "sha256": "5ed6ee804a7067160294d7db81859886788ae56e853286e7307e9c74d5c35ab3"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/480",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/medium/factor247_n15",
+      "declared_width": 15,
+      "family": "F1",
+      "band": "S",
+      "recipe": "factoring",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-medium/factor247_n15/factor247_n15.qasm",
+        "sha256": "b18490dae079cd8edbfb0a17569d5ec75543fb660d46412509987cf2235f80c5"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/960",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/medium/qf21_n15",
+      "declared_width": 15,
+      "family": "F1",
+      "band": "S",
+      "recipe": "factoring",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-medium/qf21_n15/qf21_n15.qasm",
+        "sha256": "46a3b2997c7aa44c97396a55cd4f0c71004cce4fbb52bee55b4c8ffe4fc8c7f3"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/960",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/qft_n29",
+      "declared_width": 29,
+      "family": "F1",
+      "band": "M",
+      "recipe": "QFT",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/qft_n29/qft_n29.qasm",
+        "sha256": "e17668cbd88ae90820a1498c4b71d9e3539fbacf1e7d9c4e08d5f9d5eb6564c3"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/320",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/qft_n63",
+      "declared_width": 63,
+      "family": "F1",
+      "band": "M",
+      "recipe": "QFT",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/qft_n63/qft_n63.qasm",
+        "sha256": "6fad7f3a11b4f50b10a467b076521d22891505bb759f63146be84e74225417ba"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/320",
+      "alias_sources": []
+    },
+    {
+      "input_id": "S/test_QFT_100_transpile",
+      "declared_width": 100,
+      "family": "F1",
+      "band": "L",
+      "recipe": "QFT",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qft/qft_N100.qasm",
+        "method": "test_QFT_100_transpile",
+        "sha256": "29869b5848f85301cf39f22090a118ff17b9723818b8799a0bd2321d09f69324"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/96",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/medium/bigadder_n18",
+      "declared_width": 18,
+      "family": "F2",
+      "band": "S",
+      "recipe": "bigadder",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-medium/bigadder_n18/bigadder_n18.qasm",
+        "sha256": "097ac44672d0bb9696cd77e561bc094a661f45fa84762373df840efddac4d094"
+      },
+      "aliases": [
+        "F/bigadder.qasm"
+      ],
+      "planning_case_weight": "1/2160",
+      "alias_sources": [
+        {
+          "input_id": "F/bigadder.qasm",
+          "path": "benchpress/qasm/feynman/bigadder.qasm",
+          "sha256": "cf3b6390207fdac0f485ee2adceb91060aeb7392d862acb57e814f04002b0de4"
+        }
+      ]
+    },
+    {
+      "input_id": "F/qcla_com_7.qasm",
+      "declared_width": 24,
+      "family": "F2",
+      "band": "S",
+      "recipe": "carry-lookahead",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/qcla_com_7.qasm",
+        "sha256": "d02717914bf21b68fd1aa24afaebf80c0fc9338ede537777cc870e25120c1905"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/2160",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/csla_mux_3.qasm",
+      "declared_width": 15,
+      "family": "F2",
+      "band": "S",
+      "recipe": "carry-sum-select",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/csla_mux_3.qasm",
+        "sha256": "197f68bfba0de75e4e5b2b014a1fbc52b79c27f4ff80d886a624b62ca5c429b4"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/2160",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/medium/multiply_n13",
+      "declared_width": 13,
+      "family": "F2",
+      "band": "S",
+      "recipe": "constant-multiplication",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-medium/multiply_n13/multiply_n13.qasm",
+        "sha256": "6d00a50a97f2224ddbb993ed3d82b1928cc1397997fc0347296d7fc42d731755"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/2160",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/gf2^4_mult.qasm",
+      "declared_width": 12,
+      "family": "F2",
+      "band": "S",
+      "recipe": "finite-field-multiplication",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/gf2^4_mult.qasm",
+        "sha256": "f3a787e9044b62fa616f39a2520ec0661f7233b1d9aa21404eb1ce87200e81af"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/10800",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/gf2^5_mult.qasm",
+      "declared_width": 15,
+      "family": "F2",
+      "band": "S",
+      "recipe": "finite-field-multiplication",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/gf2^5_mult.qasm",
+        "sha256": "13d6539fe10cce1835535ab762d2b5c7cf67c43951031e06b643fd5a451bb1ee"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/10800",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/gf2^6_mult.qasm",
+      "declared_width": 18,
+      "family": "F2",
+      "band": "S",
+      "recipe": "finite-field-multiplication",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/gf2^6_mult.qasm",
+        "sha256": "2b71c4ca2234dfc28af85bfa281f1ac14b03a121a7b5d33869f8f0d7c457c4a0"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/10800",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/gf2^7_mult.qasm",
+      "declared_width": 21,
+      "family": "F2",
+      "band": "S",
+      "recipe": "finite-field-multiplication",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/gf2^7_mult.qasm",
+        "sha256": "176524e406ac82875cb9912b0899fda9977803368f1a63e7ddd0e3f8ea50b5b8"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/10800",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/gf2^8_mult.qasm",
+      "declared_width": 24,
+      "family": "F2",
+      "band": "S",
+      "recipe": "finite-field-multiplication",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/gf2^8_mult.qasm",
+        "sha256": "703761a6de348f373c6ecb0203b0ddc7279f26490a9b27b2728bfe25d2fff7ae"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/10800",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/medium/multiplier_n15",
+      "declared_width": 15,
+      "family": "F2",
+      "band": "S",
+      "recipe": "integer-multiplication",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-medium/multiplier_n15/multiplier_n15.qasm",
+        "sha256": "e8ad585e5be09f96dd60f7495bd649562c6c05f8bf5d8a416b85a9d834e7eab8"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/2160",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/mod_mult_55.qasm",
+      "declared_width": 9,
+      "family": "F2",
+      "band": "S",
+      "recipe": "modular-arithmetic",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/mod_mult_55.qasm",
+        "sha256": "331cdd418872c0f2e627b83e7a72ecf95ec78630f294459563d92bef4c46c0fe"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/4320",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/mod_red_21.qasm",
+      "declared_width": 11,
+      "family": "F2",
+      "band": "S",
+      "recipe": "modular-arithmetic",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/mod_red_21.qasm",
+        "sha256": "d0c8553e0687e6e1c5fb9dd9ab0ba8b9dbce2dec869b08c41bdcbdbcf4590368"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/4320",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/vbe_adder_3.qasm",
+      "declared_width": 10,
+      "family": "F2",
+      "band": "S",
+      "recipe": "ripple-addition",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/vbe_adder_3.qasm",
+        "sha256": "661014e32278b9dc2193d5342838c3c8050cd98e6f49f456af7c77612826efdb"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/8640",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/small/adder_n10",
+      "declared_width": 10,
+      "family": "F2",
+      "band": "S",
+      "recipe": "ripple-addition",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-small/adder_n10/adder_n10.qasm",
+        "sha256": "89af975627593648e7aca6ac6cb936d2c872093c1eedcaa1b2ab4fa14b602624"
+      },
+      "aliases": [
+        "F/adder.qasm"
+      ],
+      "planning_case_weight": "1/8640",
+      "alias_sources": [
+        {
+          "input_id": "F/adder.qasm",
+          "path": "benchpress/qasm/feynman/adder.qasm",
+          "sha256": "25d2e318e6368acadd926e8197cbd5cd4786e63b9eaa5f3443fc6aa7f293f7dc"
+        }
+      ]
+    },
+    {
+      "input_id": "F/rc_adder_6.qasm",
+      "declared_width": 14,
+      "family": "F2",
+      "band": "S",
+      "recipe": "ripple-addition",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/rc_adder_6.qasm",
+        "sha256": "b7fff2267fe08799a7b50eb69a27c498fd890ca3e965cca16a1ad7b121179174"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/8640",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/adder_8.qasm",
+      "declared_width": 24,
+      "family": "F2",
+      "band": "S",
+      "recipe": "ripple-addition",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/adder_8.qasm",
+        "sha256": "82eea416000bdf4b4f00823d5d3d5f9d2f2852b32ce82e39fec02b882ca24d13"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/8640",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/medium/square_root_n18",
+      "declared_width": 18,
+      "family": "F2",
+      "band": "S",
+      "recipe": "square-root",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-medium/square_root_n18/square_root_n18.qasm",
+        "sha256": "601bbadb967001504c15a00bc6740e7b91f4f125343af0bb2c3166f51515b650"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/2160",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/qcla_mod_7.qasm",
+      "declared_width": 26,
+      "family": "F2",
+      "band": "M",
+      "recipe": "carry-lookahead",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/qcla_mod_7.qasm",
+        "sha256": "fc79b7bc69d5153f326071c41e35a8a242bb15b0cbf264b741e524fd5c92bac0"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/2240",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/qcla_adder_10.qasm",
+      "declared_width": 36,
+      "family": "F2",
+      "band": "M",
+      "recipe": "carry-lookahead",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/qcla_adder_10.qasm",
+        "sha256": "67204260c5abc16cf31e2a40a276b2af6f8234c7178ec6189d7f6005d4cfd00f"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/2240",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/csum_mux_9.qasm",
+      "declared_width": 30,
+      "family": "F2",
+      "band": "M",
+      "recipe": "carry-sum-select",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/csum_mux_9.qasm",
+        "sha256": "2af256ad36df5df095c999832fd29b29f2d2f51d3ef1387ec899d939cc7792c8"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1120",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/gf2^9_mult.qasm",
+      "declared_width": 27,
+      "family": "F2",
+      "band": "M",
+      "recipe": "finite-field-multiplication",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/gf2^9_mult.qasm",
+        "sha256": "1f26a127eac933df4733a522031c4dcbfda2f7a65d7106838ff851b83fa271a3"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/3360",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/gf2^10_mult.qasm",
+      "declared_width": 30,
+      "family": "F2",
+      "band": "M",
+      "recipe": "finite-field-multiplication",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/gf2^10_mult.qasm",
+        "sha256": "dc497f1ba477278dcf66adfb1b3c7690805a793d89fe7df54d6ebabb68678d5a"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/3360",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/gf2^16_mult.qasm",
+      "declared_width": 48,
+      "family": "F2",
+      "band": "M",
+      "recipe": "finite-field-multiplication",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/gf2^16_mult.qasm",
+        "sha256": "96951ac215509c0553f67f7dfa0e978063aff72f6c5d7d92cb65608d5d701ef1"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/3360",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/multiplier_n45",
+      "declared_width": 45,
+      "family": "F2",
+      "band": "M",
+      "recipe": "integer-multiplication",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/multiplier_n45/multiplier_n45.qasm",
+        "sha256": "606b3ce2308cf7ca71c7c0b800e76370c3530ad255906431099c4292bec13e34"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1120",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/mod_adder_1024.qasm",
+      "declared_width": 28,
+      "family": "F2",
+      "band": "M",
+      "recipe": "modular-arithmetic",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/mod_adder_1024.qasm",
+        "sha256": "8204d99a83aeae2f7e5f1ed781974ea777fdf05723512602699a0a371fe05171"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1120",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/adder_n28",
+      "declared_width": 28,
+      "family": "F2",
+      "band": "M",
+      "recipe": "ripple-addition",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/adder_n28/adder_n28.qasm",
+        "sha256": "18ffaae6478e1b9ab873e12035cb3071d826e27d4f51d1c77ec6685206b3a3cf"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/2240",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/adder_n64",
+      "declared_width": 64,
+      "family": "F2",
+      "band": "M",
+      "recipe": "ripple-addition",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/adder_n64/adder_n64.qasm",
+        "sha256": "ec67a182baee4a03a5cf2b0c33d5043260e8fda16a4e89a995356baa530e58e6"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/2240",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/square_root_n45",
+      "declared_width": 45,
+      "family": "F2",
+      "band": "M",
+      "recipe": "square-root",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/square_root_n45/square_root_n45.qasm",
+        "sha256": "1ab43276437fe6002f2464cbb8756e30a7a7f8d57b84c5df990b39fadf8f8cc6"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/2240",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/square_root_n60",
+      "declared_width": 60,
+      "family": "F2",
+      "band": "M",
+      "recipe": "square-root",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/square_root_n60/square_root_n60.qasm",
+        "sha256": "9eca8cadef1060758fc0653732795ee5e766c58d28b4b49bace733dc20127f3c"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/2240",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/gf2^32_mult.qasm",
+      "declared_width": 96,
+      "family": "F2",
+      "band": "L",
+      "recipe": "finite-field-multiplication",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/gf2^32_mult.qasm",
+        "sha256": "60d7888228a5415b76504bf6a1acb91dc8ce57d894500494c136e9989f22b7b2"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/288",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/multiplier_n75",
+      "declared_width": 75,
+      "family": "F2",
+      "band": "L",
+      "recipe": "integer-multiplication",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/multiplier_n75/multiplier_n75.qasm",
+        "sha256": "a32cc4f8dccd803af702d55a5b16cd657899016df0695b9027309d369a72cd8b"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/288",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/adder_n118",
+      "declared_width": 118,
+      "family": "F2",
+      "band": "L",
+      "recipe": "ripple-addition",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/adder_n118/adder_n118.qasm",
+        "sha256": "b6efc8e67fd640f8ba24fb36529248fe573cfacedfe45e050b3d9f0dfedc6b69"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/288",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/medium/bv_n19",
+      "declared_width": 19,
+      "family": "F3",
+      "band": "S",
+      "recipe": "BV",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-medium/bv_n19/bv_n19.qasm",
+        "sha256": "e80db1204270dc9fdf894c8acc682c2a2883c653185c61dcdc77a99ce5b6723a"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1680",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/grover_5.qasm",
+      "declared_width": 9,
+      "family": "F3",
+      "band": "S",
+      "recipe": "grover-oracle",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/grover_5.qasm",
+        "sha256": "dccb7c3a0e4811e8b30af7d1ae5186e9e628ab5a2c8d70d88aa7868b9dc434de"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1680",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/ham15-low.qasm",
+      "declared_width": 17,
+      "family": "F3",
+      "band": "S",
+      "recipe": "ham15-boolean",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/ham15-low.qasm",
+        "sha256": "98a9955b582e435aadd12fb5a0b4fe6c697087a98df5c1176e85369028dc479b"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/5040",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/ham15-med.qasm",
+      "declared_width": 17,
+      "family": "F3",
+      "band": "S",
+      "recipe": "ham15-boolean",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/ham15-med.qasm",
+        "sha256": "f64b0192faafa79cbb9621ef163fae1eadcea2974f16a518fa99e8cb4447ae90"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/5040",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/ham15-high.qasm",
+      "declared_width": 20,
+      "family": "F3",
+      "band": "S",
+      "recipe": "ham15-boolean",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/ham15-high.qasm",
+        "sha256": "b09df3a4de8f24f5b94e1571d5d6ab660a758b43599ba1b139d8ef8fd67f8017"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/5040",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/hwb8.qasm",
+      "declared_width": 12,
+      "family": "F3",
+      "band": "S",
+      "recipe": "hidden-weighted-bit",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/hwb8.qasm",
+        "sha256": "c229d40bc2d1ea65cb268189315d004d46aa1f0785f75f6d6444209f79536dc8"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/6720",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/hwb11.qasm",
+      "declared_width": 15,
+      "family": "F3",
+      "band": "S",
+      "recipe": "hidden-weighted-bit",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/hwb11.qasm",
+        "sha256": "0c435b215e79d192daaead3eb9e9303cd48ee2a714bdcb086a5ddda65e896376"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/6720",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/hwb10.qasm",
+      "declared_width": 16,
+      "family": "F3",
+      "band": "S",
+      "recipe": "hidden-weighted-bit",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/hwb10.qasm",
+        "sha256": "08b75fb69d8e0f6b048a5ff3ff7d28118efd47573169a698db1c917f78b6bf08"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/6720",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/hwb12.qasm",
+      "declared_width": 20,
+      "family": "F3",
+      "band": "S",
+      "recipe": "hidden-weighted-bit",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/hwb12.qasm",
+        "sha256": "c83930d6bc2da95ba59364c5a6ec77fcc86fc5e33fdb45626cb278fbd24a4947"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/6720",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/barenco_tof_5.qasm",
+      "declared_width": 9,
+      "family": "F3",
+      "band": "S",
+      "recipe": "multi-control-toffoli",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/barenco_tof_5.qasm",
+        "sha256": "440b1858934ced233dc990e1507ddb4cdf1ed899a85dc674ddf4bfdc7411b43e"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/6720",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/tof_5.qasm",
+      "declared_width": 9,
+      "family": "F3",
+      "band": "S",
+      "recipe": "multi-control-toffoli",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/tof_5.qasm",
+        "sha256": "97307839a9b339737cb082cbd6de2e82306b63d6cf438d6165a33fb1d11ef57f"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/6720",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/barenco_tof_10.qasm",
+      "declared_width": 19,
+      "family": "F3",
+      "band": "S",
+      "recipe": "multi-control-toffoli",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/barenco_tof_10.qasm",
+        "sha256": "6b6294651b862f1ad550c149bf7d40f166ab3ed0d8d3d176337074f3980902ee"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/6720",
+      "alias_sources": []
+    },
+    {
+      "input_id": "F/tof_10.qasm",
+      "declared_width": 19,
+      "family": "F3",
+      "band": "S",
+      "recipe": "multi-control-toffoli",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/feynman/tof_10.qasm",
+        "sha256": "9eb83815d7311c8ec758b6ad9c37f2af9dd13a7a77d301b16f3d33a1442ca3f6"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/6720",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/medium/seca_n11",
+      "declared_width": 11,
+      "family": "F3",
+      "band": "S",
+      "recipe": "parity-check-QEC",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-medium/seca_n11/seca_n11.qasm",
+        "sha256": "42ed28a2fe7ef6e8f3498a4b4fe326886ba3ee730569874e6d6f928a4efb1b6a"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/3360",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/medium/qec9xz_n17",
+      "declared_width": 17,
+      "family": "F3",
+      "band": "S",
+      "recipe": "parity-check-QEC",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-medium/qec9xz_n17/qec9xz_n17.qasm",
+        "sha256": "27399092d22b16052641827cf12c87f524342ec308d8a2f6589a2d9f815682d3"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/3360",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/medium/qram_n20",
+      "declared_width": 20,
+      "family": "F3",
+      "band": "S",
+      "recipe": "qram",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-medium/qram_n20/qram_n20.qasm",
+        "sha256": "2b22f2a0a013cb91c5b59063b04e33998a1e24bbd5300a085b01edadd9ac763d"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1680",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/cc_n32",
+      "declared_width": 32,
+      "family": "F3",
+      "band": "M",
+      "recipe": "counterfeit-coin",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/cc_n32/cc_n32.qasm",
+        "sha256": "0f67ec718f5663c1e55bbfc5ad930418266151bfa4bbe5b77d67529c22e7051a"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/640",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/cc_n64",
+      "declared_width": 64,
+      "family": "F3",
+      "band": "M",
+      "recipe": "counterfeit-coin",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/cc_n64/cc_n64.qasm",
+        "sha256": "eb67f8cf6f308aed40b78eb84561f07cdc5987e4ec1eba8e1a9b37f8f40185cb"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/640",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/medium/swap_test_n25",
+      "declared_width": 25,
+      "family": "F3",
+      "band": "M",
+      "recipe": "swap-test-kNN",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-medium/swap_test_n25/swap_test_n25.qasm",
+        "sha256": "45649f6f4af12870b87c8088d97e286fff709b34e38f6363fef79c35a6bda1f0"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/960",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/knn_n31",
+      "declared_width": 31,
+      "family": "F3",
+      "band": "M",
+      "recipe": "swap-test-kNN",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/knn_n31/knn_n31.qasm",
+        "sha256": "7f5af7d17ec13348df03c30e665aec773b04fcd65fb7e4d536866d820ca43bc0"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/960",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/swap_test_n41",
+      "declared_width": 41,
+      "family": "F3",
+      "band": "M",
+      "recipe": "swap-test-kNN",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/swap_test_n41/swap_test_n41.qasm",
+        "sha256": "1637275b83d889f9b8f7352947f125ceee8fde7e5977b4da245467342ff9987b"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/960",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/bv_n70",
+      "declared_width": 70,
+      "family": "F3",
+      "band": "L",
+      "recipe": "BV",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/bv_n70/bv_n70.qasm",
+        "sha256": "802e0740406305735367ebd1f2b43578922b68c8c6b9a30cf48ff8d3b0ffd35a"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/384",
+      "alias_sources": []
+    },
+    {
+      "input_id": "S/test_BV_100_transpile",
+      "declared_width": 100,
+      "family": "F3",
+      "band": "L",
+      "recipe": "BV",
+      "category": "main",
+      "source": {
+        "kind": "generator",
+        "method": "test_BV_100_transpile",
+        "path": "benchpress/qiskit_gym/device_transpile/test_summit.py",
+        "sha256": "ef3e406a7b61a9fcee3a5dd764896f140903671c91045c7367305f49ab500df6"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/384",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/knn_n67",
+      "declared_width": 67,
+      "family": "F3",
+      "band": "L",
+      "recipe": "swap-test-kNN",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/knn_n67/knn_n67.qasm",
+        "sha256": "3368a00839e39ee324d2208b0f3eb39a271c1cb3a98699fdbed13bdda533c30a"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/768",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/swap_test_n83",
+      "declared_width": 83,
+      "family": "F3",
+      "band": "L",
+      "recipe": "swap-test-kNN",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/swap_test_n83/swap_test_n83.qasm",
+        "sha256": "f424a498f16be2a3f656c5394754e9fc154c645acf803ea6c0347b2911805eb4"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/768",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/swap_test_n115",
+      "declared_width": 115,
+      "family": "F3",
+      "band": "L",
+      "recipe": "swap-test-kNN",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/swap_test_n115/swap_test_n115.qasm",
+        "sha256": "52f452fdbb48d20b981d1a4d1292b80790f2dfe23f1a3d3477cc4cc00d6abf5c"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/768",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/knn_129",
+      "declared_width": 129,
+      "family": "F3",
+      "band": "L",
+      "recipe": "swap-test-kNN",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/knn_n129/knn_129.qasm",
+        "sha256": "308b2ba169c3c4f86b42cc4eba92cbb0cb3ded9eb91d0f9681b885d3c6236aed"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/768",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/dnn_n33",
+      "declared_width": 33,
+      "family": "F4",
+      "band": "M",
+      "recipe": "DNN-hub",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/dnn_n33/dnn_n33.qasm",
+        "sha256": "efed797285c2acf1e5b79d2ac99eadfd5942933a4263bf7481ae1aa7e78e6bbb"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/512",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/dnn_n51",
+      "declared_width": 51,
+      "family": "F4",
+      "band": "M",
+      "recipe": "DNN-hub",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/dnn_n51/dnn_n51.qasm",
+        "sha256": "28b0655a425521c178f22e78c3b3c6dacdb7993c4fe96e1a9fb5ef4234b68071"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/512",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/qugan_n39",
+      "declared_width": 39,
+      "family": "F4",
+      "band": "M",
+      "recipe": "QUGAN",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/qugan_n39/qugan_n39.qasm",
+        "sha256": "963b3b2fcb975b5c5a06d773f08e95dac982e130026c6bfb048c0e256e145244"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/256",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/qugan_n71",
+      "declared_width": 71,
+      "family": "F4",
+      "band": "L",
+      "recipe": "QUGAN",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/qugan_n71/qugan_n71.qasm",
+        "sha256": "83d7b57b6fd657ba9e36f1ec73754d3fe9affab360c49bffcc64fa505f36084f"
+      },
+      "aliases": [],
+      "planning_case_weight": "5/1536",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/qugan_n111",
+      "declared_width": 111,
+      "family": "F4",
+      "band": "L",
+      "recipe": "QUGAN",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/qugan_n111/qugan_n111.qasm",
+        "sha256": "7042ca1aae2b2075310899cbee8cee1a6d71071846fdb7283b0e6184e62e5a55"
+      },
+      "aliases": [],
+      "planning_case_weight": "5/1536",
+      "alias_sources": []
+    },
+    {
+      "input_id": "S/test_circSU2_89_transpile",
+      "declared_width": 89,
+      "family": "F4",
+      "band": "L",
+      "recipe": "circular-SU2",
+      "category": "main",
+      "source": {
+        "kind": "generator",
+        "method": "test_circSU2_89_transpile",
+        "path": "benchpress/qiskit_gym/device_transpile/test_summit.py",
+        "sha256": "ef3e406a7b61a9fcee3a5dd764896f140903671c91045c7367305f49ab500df6"
+      },
+      "aliases": [],
+      "planning_case_weight": "5/768",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_gnp-k_5_n-24_rinst-04",
+      "declared_width": 24,
+      "family": "F5",
+      "band": "S",
+      "recipe": "MaxCut-Hamiltonian",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_gnp-k_5_n-24_rinst-04",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/gnp-k_5_n-24_rinst-04,",
+        "ham_problem": "ham-graph-gnp_k-5",
+        "ham_qubits": 24,
+        "ham_terms": 189
+      },
+      "aliases": [],
+      "planning_case_weight": "1/960",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/medium/sat_n11",
+      "declared_width": 11,
+      "family": "F5",
+      "band": "S",
+      "recipe": "SAT-oracle",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-medium/sat_n11/sat_n11.qasm",
+        "sha256": "16b195d3f53754f6ce497e9f866b28df1c361ef20fc390461678573f0cd813e3"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/960",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_tsp_rand-002_Ncity-4_enc-stdbinary",
+      "declared_width": 8,
+      "family": "F5",
+      "band": "S",
+      "recipe": "TSP-Hamiltonian",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_tsp_rand-002_Ncity-4_enc-stdbinary",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/tsp_rand-002_Ncity-4_enc-stdbinary,",
+        "ham_problem": "TSP_Ncity-4",
+        "ham_qubits": 8,
+        "ham_terms": 49
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1920",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_tsp_prob-ulysses22_Ncity-8_enc-stdbinary",
+      "declared_width": 24,
+      "family": "F5",
+      "band": "S",
+      "recipe": "TSP-Hamiltonian",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_tsp_prob-ulysses22_Ncity-8_enc-stdbinary",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/tsp_prob-ulysses22_Ncity-8_enc-stdbinary,",
+        "ham_problem": "TSP_Ncity-8",
+        "ham_qubits": 24,
+        "ham_terms": 449
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1920",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_complbipart-n-10_a-5_b-5",
+      "declared_width": 10,
+      "family": "F5",
+      "band": "S",
+      "recipe": "quantum-MaxCut-Hamiltonian",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_complbipart-n-10_a-5_b-5",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/complbipart-n-10_a-5_b-5,",
+        "ham_problem": "graph-complete_bipart",
+        "ham_qubits": 10,
+        "ham_terms": 76
+      },
+      "aliases": [],
+      "planning_case_weight": "1/960",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_reg-5_n-10_rinst-07",
+      "declared_width": 30,
+      "family": "F5",
+      "band": "M",
+      "recipe": "Max-k-Cut-Hamiltonian",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_reg-5_n-10_rinst-07",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/reg-5_n-10_rinst-07,",
+        "ham_problem": "ham-binary-graph-regular_k-5",
+        "ham_qubits": 30,
+        "ham_terms": 1296
+      },
+      "aliases": [],
+      "planning_case_weight": "1/640",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_0-uuf100-0810.cnf-40-res",
+      "declared_width": 40,
+      "family": "F5",
+      "band": "M",
+      "recipe": "SAT-Hamiltonian",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_0-uuf100-0810.cnf-40-res",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/0-uuf100-0810.cnf-40-res,",
+        "ham_problem": "uuf100-ham",
+        "ham_qubits": 40,
+        "ham_terms": 188
+      },
+      "aliases": [],
+      "planning_case_weight": "1/2560",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_8-uuf100-0509.cnf-40-cc",
+      "declared_width": 40,
+      "family": "F5",
+      "band": "M",
+      "recipe": "SAT-Hamiltonian",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_8-uuf100-0509.cnf-40-cc",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/8-uuf100-0509.cnf-40-cc,",
+        "ham_problem": "uuf100-ham",
+        "ham_qubits": 40,
+        "ham_terms": 207
+      },
+      "aliases": [],
+      "planning_case_weight": "1/2560",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_2-uf100-0396.cnf-46-res",
+      "declared_width": 46,
+      "family": "F5",
+      "band": "M",
+      "recipe": "SAT-Hamiltonian",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_2-uf100-0396.cnf-46-res",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/2-uf100-0396.cnf-46-res,",
+        "ham_problem": "uf100-ham",
+        "ham_qubits": 46,
+        "ham_terms": 272
+      },
+      "aliases": [],
+      "planning_case_weight": "1/2560",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_2-uf100-0601.cnf-46-res",
+      "declared_width": 46,
+      "family": "F5",
+      "band": "M",
+      "recipe": "SAT-Hamiltonian",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_2-uf100-0601.cnf-46-res",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/2-uf100-0601.cnf-46-res,",
+        "ham_problem": "uf100-ham",
+        "ham_qubits": 46,
+        "ham_terms": 285
+      },
+      "aliases": [],
+      "planning_case_weight": "1/2560",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_tsp_prob-ts225_Ncity-5_enc-unary",
+      "declared_width": 25,
+      "family": "F5",
+      "band": "M",
+      "recipe": "TSP-Hamiltonian",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_tsp_prob-ts225_Ncity-5_enc-unary",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/tsp_prob-ts225_Ncity-5_enc-unary,",
+        "ham_problem": "TSP_Ncity-5",
+        "ham_qubits": 25,
+        "ham_terms": 126
+      },
+      "aliases": [],
+      "planning_case_weight": "1/2560",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_tsp_prob-lin105_Ncity-7_enc-unary",
+      "declared_width": 49,
+      "family": "F5",
+      "band": "M",
+      "recipe": "TSP-Hamiltonian",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_tsp_prob-lin105_Ncity-7_enc-unary",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/tsp_prob-lin105_Ncity-7_enc-unary,",
+        "ham_problem": "TSP_Ncity-7",
+        "ham_qubits": 49,
+        "ham_terms": 344
+      },
+      "aliases": [],
+      "planning_case_weight": "1/2560",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_tsp_prob-d198_Ncity-8_enc-unary",
+      "declared_width": 64,
+      "family": "F5",
+      "band": "M",
+      "recipe": "TSP-Hamiltonian",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_tsp_prob-d198_Ncity-8_enc-unary",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/tsp_prob-d198_Ncity-8_enc-unary,",
+        "ham_problem": "TSP_Ncity-8",
+        "ham_qubits": 64,
+        "ham_terms": 513
+      },
+      "aliases": [],
+      "planning_case_weight": "1/2560",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_tsp_prob-fl417_Ncity-16_enc-stdbinary",
+      "declared_width": 64,
+      "family": "F5",
+      "band": "M",
+      "recipe": "TSP-Hamiltonian",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_tsp_prob-fl417_Ncity-16_enc-stdbinary",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/tsp_prob-fl417_Ncity-16_enc-stdbinary,",
+        "ham_problem": "TSP_Ncity-16",
+        "ham_qubits": 64,
+        "ham_terms": 3841
+      },
+      "aliases": [],
+      "planning_case_weight": "1/2560",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_gnp-k_4_n-40_rinst-07",
+      "declared_width": 40,
+      "family": "F5",
+      "band": "M",
+      "recipe": "quantum-MaxCut-Hamiltonian",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_gnp-k_4_n-40_rinst-07",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/gnp-k_4_n-40_rinst-07,",
+        "ham_problem": "graph-gnp_k-4",
+        "ham_qubits": 40,
+        "ham_terms": 805
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1280",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_gnp-k_5_n-60_rinst-19",
+      "declared_width": 60,
+      "family": "F5",
+      "band": "M",
+      "recipe": "quantum-MaxCut-Hamiltonian",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_gnp-k_5_n-60_rinst-19",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/gnp-k_5_n-60_rinst-19,",
+        "ham_problem": "graph-gnp_k-5",
+        "ham_qubits": 60,
+        "ham_terms": 1972
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1280",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_dsjc1000.1,n-36,rinst-4",
+      "declared_width": 72,
+      "family": "F5",
+      "band": "L",
+      "recipe": "Max-k-Cut-Hamiltonian",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_dsjc1000.1,n-36,rinst-4",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/dsjc1000.1,n-36,rinst-4,",
+        "ham_problem": "ham-binary-color02-dsjc1000.1_k-3",
+        "ham_qubits": 72,
+        "ham_terms": 676
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1440",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_queen13_13,n-28,rinst-0",
+      "declared_width": 112,
+      "family": "F5",
+      "band": "L",
+      "recipe": "Max-k-Cut-Hamiltonian",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_queen13_13,n-28,rinst-0",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/queen13_13,n-28,rinst-0,",
+        "ham_problem": "ham-unary-color02-queen13_13_k-4",
+        "ham_qubits": 112,
+        "ham_terms": 413
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1440",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_will199gpia,n-60,rinst-8",
+      "declared_width": 120,
+      "family": "F5",
+      "band": "L",
+      "recipe": "Max-k-Cut-Hamiltonian",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_will199gpia,n-60,rinst-8",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/will199gpia,n-60,rinst-8,",
+        "ham_problem": "ham-gray-color02-will199gpia_k-3",
+        "ham_qubits": 120,
+        "ham_terms": 1513
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1440",
+      "alias_sources": []
+    },
+    {
+      "input_id": "S/test_QAOA_100_transpile",
+      "declared_width": 100,
+      "family": "F5",
+      "band": "L",
+      "recipe": "QAOA",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qaoa/qaoa_barabasi_albert_N100_3reps.qasm",
+        "method": "test_QAOA_100_transpile",
+        "sha256": "8fb624369856f4ba0acab563e91f26123cee8a33b4ca890f44aaa7d3e184bb17"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/480",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_4-uf100-0246.cnf-70-res",
+      "declared_width": 70,
+      "family": "F5",
+      "band": "L",
+      "recipe": "SAT-Hamiltonian",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_4-uf100-0246.cnf-70-res",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/4-uf100-0246.cnf-70-res,",
+        "ham_problem": "uf100-ham",
+        "ham_qubits": 70,
+        "ham_terms": 689
+      },
+      "aliases": [],
+      "planning_case_weight": "1/960",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_4-flat100-7.cnf-90-cc",
+      "declared_width": 90,
+      "family": "F5",
+      "band": "L",
+      "recipe": "SAT-Hamiltonian",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_4-flat100-7.cnf-90-cc",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/4-flat100-7.cnf-90-cc,",
+        "ham_problem": "flat100-ham",
+        "ham_qubits": 90,
+        "ham_terms": 224
+      },
+      "aliases": [],
+      "planning_case_weight": "1/960",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_tsp_prob-pr76_Ncity-10_enc-unary",
+      "declared_width": 100,
+      "family": "F5",
+      "band": "L",
+      "recipe": "TSP-Hamiltonian",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_tsp_prob-pr76_Ncity-10_enc-unary",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/tsp_prob-pr76_Ncity-10_enc-unary,",
+        "ham_problem": "TSP_Ncity-10",
+        "ham_qubits": 100,
+        "ham_terms": 1001
+      },
+      "aliases": [],
+      "planning_case_weight": "1/480",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_gnp-k_5_n-90_rinst-02",
+      "declared_width": 90,
+      "family": "F5",
+      "band": "L",
+      "recipe": "quantum-MaxCut-Hamiltonian",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_gnp-k_5_n-90_rinst-02",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/gnp-k_5_n-90_rinst-02,",
+        "ham_problem": "graph-gnp_k-5",
+        "ham_qubits": 90,
+        "ham_terms": 2959
+      },
+      "aliases": [],
+      "planning_case_weight": "1/960",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_reg-4_n-90_rinst-07",
+      "declared_width": 90,
+      "family": "F5",
+      "band": "L",
+      "recipe": "quantum-MaxCut-Hamiltonian",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_reg-4_n-90_rinst-07",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/reg-4_n-90_rinst-07,",
+        "ham_problem": "graph-regular_reg-4",
+        "ham_qubits": 90,
+        "ham_terms": 541
+      },
+      "aliases": [],
+      "planning_case_weight": "1/960",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/medium/bwt_n21",
+      "declared_width": 21,
+      "family": "F6",
+      "band": "S",
+      "recipe": "BWT-quantum-walk",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-medium/bwt_n21/bwt_n21.qasm",
+        "sha256": "d53499b597f9f1f3253758501cbacbfb468fdcc77192d7f6f320ee5284bdefd4"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/480",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-4_U-40_enc-gray_d-8",
+      "declared_width": 12,
+      "family": "F6",
+      "band": "S",
+      "recipe": "Bose-Hubbard",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-4_U-40_enc-gray_d-8",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/bh_graph-1D-grid-pbc-qubitnodes_Lx-4_U-40_enc-gray_d-8,",
+        "ham_problem": "BH_D-1_d-8",
+        "ham_qubits": 12,
+        "ham_terms": 1177
+      },
+      "aliases": [],
+      "planning_case_weight": "1/480",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/bwt_n37",
+      "declared_width": 37,
+      "family": "F6",
+      "band": "M",
+      "recipe": "BWT-quantum-walk",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/bwt_n37/bwt_n37.qasm",
+        "sha256": "ae87adc21c21d45260b9f7605d6947ac96269a38c3870760f718029abdd39016"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/320",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-14_U-10_enc-stdbinary_d-4",
+      "declared_width": 28,
+      "family": "F6",
+      "band": "M",
+      "recipe": "Bose-Hubbard",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-14_U-10_enc-stdbinary_d-4",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/bh_graph-1D-grid-pbc-qubitnodes_Lx-14_U-10_enc-stdbinary_d-4,",
+        "ham_problem": "BH_D-1_d-4",
+        "ham_qubits": 28,
+        "ham_terms": 491
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1920",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_bh_graph-2D-triag-nonpbc-qubitnodes_Lx-3_Ly-5_U-30_enc-gray_d-4",
+      "declared_width": 28,
+      "family": "F6",
+      "band": "M",
+      "recipe": "Bose-Hubbard",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_bh_graph-2D-triag-nonpbc-qubitnodes_Lx-3_Ly-5_U-30_enc-gray_d-4",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/bh_graph-2D-triag-nonpbc-qubitnodes_Lx-3_Ly-5_U-30_enc-gray_d-4,",
+        "ham_problem": "BH_D-2_d-4",
+        "ham_qubits": 28,
+        "ham_terms": 939
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1920",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_bh_graph-3D-grid-nonpbc-qubitnodes_Lx-2_Ly-2_Lz-2_U-20_enc-unary_d-4",
+      "declared_width": 32,
+      "family": "F6",
+      "band": "M",
+      "recipe": "Bose-Hubbard",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_bh_graph-3D-grid-nonpbc-qubitnodes_Lx-2_Ly-2_Lz-2_U-20_enc-unary_d-4",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/bh_graph-3D-grid-nonpbc-qubitnodes_Lx-2_Ly-2_Lz-2_U-20_enc-unary_d-4,",
+        "ham_problem": "BH_D-3_d-4",
+        "ham_qubits": 32,
+        "ham_terms": 881
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1920",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_bh_graph-1D-grid-nonpbc-qubitnodes_Lx-12_U-40_enc-unary_d-4",
+      "declared_width": 48,
+      "family": "F6",
+      "band": "M",
+      "recipe": "Bose-Hubbard",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_bh_graph-1D-grid-nonpbc-qubitnodes_Lx-12_U-40_enc-unary_d-4",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/bh_graph-1D-grid-nonpbc-qubitnodes_Lx-12_U-40_enc-unary_d-4,",
+        "ham_problem": "BH_D-1_d-4",
+        "ham_qubits": 48,
+        "ham_terms": 817
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1920",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-24_U-20_enc-stdbinary_d-4",
+      "declared_width": 48,
+      "family": "F6",
+      "band": "M",
+      "recipe": "Bose-Hubbard",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-24_U-20_enc-stdbinary_d-4",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/bh_graph-1D-grid-pbc-qubitnodes_Lx-24_U-20_enc-stdbinary_d-4,",
+        "ham_problem": "BH_D-1_d-4",
+        "ham_qubits": 48,
+        "ham_terms": 841
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1920",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_bh_graph-2D-triag-pbc-qubitnodes_Lx-5_Ly-5_U-30_enc-unary_d-4",
+      "declared_width": 60,
+      "family": "F6",
+      "band": "M",
+      "recipe": "Bose-Hubbard",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_bh_graph-2D-triag-pbc-qubitnodes_Lx-5_Ly-5_U-30_enc-unary_d-4",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/bh_graph-2D-triag-pbc-qubitnodes_Lx-5_Ly-5_U-30_enc-unary_d-4,",
+        "ham_problem": "BH_D-2_d-4",
+        "ham_qubits": 60,
+        "ham_terms": 3271
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1920",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-10_U-30_enc-unary_d-8",
+      "declared_width": 80,
+      "family": "F6",
+      "band": "L",
+      "recipe": "Bose-Hubbard",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-10_U-30_enc-unary_d-8",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/bh_graph-1D-grid-pbc-qubitnodes_Lx-10_U-30_enc-unary_d-8,",
+        "ham_problem": "BH_D-1_d-8",
+        "ham_qubits": 80,
+        "ham_terms": 3981
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1728",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-46_U-2_enc-gray_d-4",
+      "declared_width": 92,
+      "family": "F6",
+      "band": "L",
+      "recipe": "Bose-Hubbard",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-46_U-2_enc-gray_d-4",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/bh_graph-1D-grid-pbc-qubitnodes_Lx-46_U-2_enc-gray_d-4,",
+        "ham_problem": "BH_D-1_d-4",
+        "ham_qubits": 92,
+        "ham_terms": 1611
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1728",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_bh_graph-2D-grid-nonpbc-qubitnodes_Lx-7_Ly-7_U-70_enc-gray_d-4",
+      "declared_width": 98,
+      "family": "F6",
+      "band": "L",
+      "recipe": "Bose-Hubbard",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_bh_graph-2D-grid-nonpbc-qubitnodes_Lx-7_Ly-7_U-70_enc-gray_d-4",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/bh_graph-2D-grid-nonpbc-qubitnodes_Lx-7_Ly-7_U-70_enc-gray_d-4,",
+        "ham_problem": "BH_D-2_d-4",
+        "ham_qubits": 98,
+        "ham_terms": 2836
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1728",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_bh_graph-2D-triag-pbc-qubitnodes_Lx-10_Ly-10_U-30_enc-stdbinary_d-4",
+      "declared_width": 100,
+      "family": "F6",
+      "band": "L",
+      "recipe": "Bose-Hubbard",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_bh_graph-2D-triag-pbc-qubitnodes_Lx-10_Ly-10_U-30_enc-stdbinary_d-4",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/bh_graph-2D-triag-pbc-qubitnodes_Lx-10_Ly-10_U-30_enc-stdbinary_d-4,",
+        "ham_problem": "BH_D-2_d-4",
+        "ham_qubits": 100,
+        "ham_terms": 4951
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1728",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-60_U-10_enc-stdbinary_d-4",
+      "declared_width": 120,
+      "family": "F6",
+      "band": "L",
+      "recipe": "Bose-Hubbard",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-60_U-10_enc-stdbinary_d-4",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/bh_graph-1D-grid-pbc-qubitnodes_Lx-60_U-10_enc-stdbinary_d-4,",
+        "ham_problem": "BH_D-1_d-4",
+        "ham_qubits": 120,
+        "ham_terms": 2101
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1728",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_bh_graph-2D-triag-pbc-qubitnodes_Lx-3_Ly-22_U-70_enc-unary_d-4",
+      "declared_width": 132,
+      "family": "F6",
+      "band": "L",
+      "recipe": "Bose-Hubbard",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_bh_graph-2D-triag-pbc-qubitnodes_Lx-3_Ly-22_U-70_enc-unary_d-4",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/bh_graph-2D-triag-pbc-qubitnodes_Lx-3_Ly-22_U-70_enc-unary_d-4,",
+        "ham_problem": "BH_D-2_d-4",
+        "ham_qubits": 132,
+        "ham_terms": 7195
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1728",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_fh-graph-1D-grid-pbc-qubitnodes_Lx-50_U-2_enc-jw",
+      "declared_width": 100,
+      "family": "F6",
+      "band": "L",
+      "recipe": "Fermi-Hubbard",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_fh-graph-1D-grid-pbc-qubitnodes_Lx-50_U-2_enc-jw",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/fh-graph-1D-grid-pbc-qubitnodes_Lx-50_U-2_enc-jw,",
+        "ham_problem": "FH_D-1",
+        "ham_qubits": 100,
+        "ham_terms": 351
+      },
+      "aliases": [],
+      "planning_case_weight": "1/288",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_graph-2D-grid-nonpbc-qubitnodes_Lx-5_Ly-15_h-3",
+      "declared_width": 75,
+      "family": "F6",
+      "band": "L",
+      "recipe": "TFIM",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_graph-2D-grid-nonpbc-qubitnodes_Lx-5_Ly-15_h-3",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/graph-2D-grid-nonpbc-qubitnodes_Lx-5_Ly-15_h-3,",
+        "ham_problem": "tfim",
+        "ham_qubits": 75,
+        "ham_terms": 205
+      },
+      "aliases": [],
+      "planning_case_weight": "1/576",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_graph-2D-triag-pbc-qubitnodes_Lx-13_Ly-13_h-0.1",
+      "declared_width": 91,
+      "family": "F6",
+      "band": "L",
+      "recipe": "TFIM",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_graph-2D-triag-pbc-qubitnodes_Lx-13_Ly-13_h-0.1",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/graph-2D-triag-pbc-qubitnodes_Lx-13_Ly-13_h-0.1,",
+        "ham_problem": "tfim",
+        "ham_qubits": 91,
+        "ham_terms": 364
+      },
+      "aliases": [],
+      "planning_case_weight": "1/576",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/medium/gcm_h6",
+      "declared_width": 13,
+      "family": "F7",
+      "band": "S",
+      "recipe": "GCM-chemistry",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-medium/gcm_n13/gcm_h6.qasm",
+        "sha256": "a05542ded09513e04119ff9272da6a842f592223b429df4ff6a51b41523f6f4b"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1800",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/small/vqe_uccsd_n8",
+      "declared_width": 8,
+      "family": "F7",
+      "band": "S",
+      "recipe": "UCCSD",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-small/vqe_uccsd_n8/vqe_uccsd_n8.qasm",
+        "sha256": "4ddef8b25d014cbf418f6071fbd622a3bab0f3ffefd5852a4fba93401185db56"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1800",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_ham_JW-10",
+      "declared_width": 10,
+      "family": "F7",
+      "band": "S",
+      "recipe": "molecule:BH",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_ham_JW-10",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/ham_JW-10,",
+        "ham_problem": "BH",
+        "ham_qubits": 10,
+        "ham_terms": 276
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1800",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_ham_JW-18",
+      "declared_width": 18,
+      "family": "F7",
+      "band": "S",
+      "recipe": "molecule:C2",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_ham_JW-18",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/ham_JW-18,",
+        "ham_problem": "C2",
+        "ham_qubits": 18,
+        "ham_terms": 1884
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1800",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_ham_JW-8",
+      "declared_width": 8,
+      "family": "F7",
+      "band": "S",
+      "recipe": "molecule:H2",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_ham_JW-8",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/ham_JW-8,",
+        "ham_problem": "H2",
+        "ham_qubits": 8,
+        "ham_terms": 185
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1800",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_ham_parity10",
+      "declared_width": 10,
+      "family": "F7",
+      "band": "S",
+      "recipe": "molecule:HF",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_ham_parity10",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/ham_parity10,",
+        "ham_problem": "HF",
+        "ham_qubits": 10,
+        "ham_terms": 276
+      },
+      "aliases": [],
+      "planning_case_weight": "1/3600",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_ham_BK12",
+      "declared_width": 12,
+      "family": "F7",
+      "band": "S",
+      "recipe": "molecule:HF",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_ham_BK12",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/ham_BK12,",
+        "ham_problem": "HF",
+        "ham_qubits": 12,
+        "ham_terms": 631
+      },
+      "aliases": [],
+      "planning_case_weight": "1/3600",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_ham_JW14",
+      "declared_width": 14,
+      "family": "F7",
+      "band": "S",
+      "recipe": "molecule:Li2",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_ham_JW14",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/ham_JW14,",
+        "ham_problem": "Li2",
+        "ham_qubits": 14,
+        "ham_terms": 670
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1800",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_ham_parity-14",
+      "declared_width": 14,
+      "family": "F7",
+      "band": "S",
+      "recipe": "molecule:N2",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_ham_parity-14",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/ham_parity-14,",
+        "ham_problem": "N2",
+        "ham_qubits": 14,
+        "ham_terms": 670
+      },
+      "aliases": [],
+      "planning_case_weight": "1/3600",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_ham_JW-22",
+      "declared_width": 22,
+      "family": "F7",
+      "band": "S",
+      "recipe": "molecule:N2",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_ham_JW-22",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/ham_JW-22,",
+        "ham_problem": "N2",
+        "ham_qubits": 22,
+        "ham_terms": 4578
+      },
+      "aliases": [],
+      "planning_case_weight": "1/3600",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_ham_BK-14",
+      "declared_width": 14,
+      "family": "F7",
+      "band": "S",
+      "recipe": "molecule:NH",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_ham_BK-14",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/ham_BK-14,",
+        "ham_problem": "NH",
+        "ham_qubits": 14,
+        "ham_terms": 1086
+      },
+      "aliases": [],
+      "planning_case_weight": "1/3600",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_ham_JW-14",
+      "declared_width": 14,
+      "family": "F7",
+      "band": "S",
+      "recipe": "molecule:NH",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_ham_JW-14",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/ham_JW-14,",
+        "ham_problem": "NH",
+        "ham_qubits": 14,
+        "ham_terms": 1086
+      },
+      "aliases": [],
+      "planning_case_weight": "1/3600",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_ham_JW24",
+      "declared_width": 24,
+      "family": "F7",
+      "band": "S",
+      "recipe": "molecule:Na2",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_ham_JW24",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/ham_JW24,",
+        "ham_problem": "Na2",
+        "ham_qubits": 24,
+        "ham_terms": 6509
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1800",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_ham_BK22",
+      "declared_width": 22,
+      "family": "F7",
+      "band": "S",
+      "recipe": "molecule:O3",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_ham_BK22",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/ham_BK22,",
+        "ham_problem": "O3",
+        "ham_qubits": 22,
+        "ham_terms": 5466
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1800",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_ham_JW12",
+      "declared_width": 12,
+      "family": "F7",
+      "band": "S",
+      "recipe": "molecule:OH",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_ham_JW12",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/ham_JW12,",
+        "ham_problem": "OH",
+        "ham_qubits": 12,
+        "ham_terms": 631
+      },
+      "aliases": [],
+      "planning_case_weight": "1/3600",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_ham_parity12",
+      "declared_width": 12,
+      "family": "F7",
+      "band": "S",
+      "recipe": "molecule:OH",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_ham_parity12",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/ham_parity12,",
+        "ham_problem": "OH",
+        "ham_qubits": 12,
+        "ham_terms": 631
+      },
+      "aliases": [],
+      "planning_case_weight": "1/3600",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_enc_gray_dvalues_4-4-4-4-4-4-4",
+      "declared_width": 14,
+      "family": "F7",
+      "band": "S",
+      "recipe": "molecule:all-vib-fccf",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_enc_gray_dvalues_4-4-4-4-4-4-4",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/enc_gray_dvalues_4-4-4-4-4-4-4,",
+        "ham_problem": "all-vib-fccf",
+        "ham_qubits": 14,
+        "ham_terms": 1036
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1800",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_enc_unary_dvalues_4-4-4",
+      "declared_width": 12,
+      "family": "F7",
+      "band": "S",
+      "recipe": "molecule:all-vib-hco",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_enc_unary_dvalues_4-4-4",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/enc_unary_dvalues_4-4-4,",
+        "ham_problem": "all-vib-hco",
+        "ham_qubits": 12,
+        "ham_terms": 1789
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1800",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_enc_gray_dvalues_8-8-8",
+      "declared_width": 9,
+      "family": "F7",
+      "band": "S",
+      "recipe": "molecule:all-vib-o3",
+      "category": "main",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_enc_gray_dvalues_8-8-8",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/enc_gray_dvalues_8-8-8,",
+        "ham_problem": "all-vib-o3",
+        "ham_qubits": 9,
+        "ham_terms": 2802
+      },
+      "aliases": [],
+      "planning_case_weight": "1/1800",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/vqe_uccsd_n28",
+      "declared_width": 28,
+      "family": "F7",
+      "band": "M",
+      "recipe": "UCCSD",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/vqe_uccsd_n28/vqe_uccsd_n28.qasm",
+        "sha256": "6ba9f9a7b3950c19cec7863cdd2e256d31b3210ad5dc2039189c09260e20caac"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/80",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/32",
+      "declared_width": 32,
+      "family": "F8",
+      "band": "M",
+      "recipe": "quantum-volume",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/QV_n32/32.qasm",
+        "sha256": "45093e91e2bd96bf140ea664a4a16fa99c7f123648619954fb495603b81e9a8d"
+      },
+      "aliases": [],
+      "planning_case_weight": "1/128",
+      "alias_sources": []
+    },
+    {
+      "input_id": "S/test_clifford_100_transpile",
+      "declared_width": 100,
+      "family": "F8",
+      "band": "L",
+      "recipe": "clifford",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/clifford/clifford_100_12345.qasm",
+        "method": "test_clifford_100_transpile",
+        "sha256": "9fa4d0e134aad9958a7d877d632dece1876ddb6ed69936a8352f5ff814b98434"
+      },
+      "aliases": [],
+      "planning_case_weight": "5/768",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/100",
+      "declared_width": 100,
+      "family": "F8",
+      "band": "L",
+      "recipe": "quantum-volume",
+      "category": "main",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/QV_n100/100.qasm",
+        "sha256": "5fb6ea3de82da40591d657aa3ef286b8505c1c0a74acb4296a2754a702511d41"
+      },
+      "aliases": [],
+      "planning_case_weight": "5/1536",
+      "alias_sources": []
+    },
+    {
+      "input_id": "S/test_QV_100_transpile",
+      "declared_width": 100,
+      "family": "F8",
+      "band": "L",
+      "recipe": "quantum-volume",
+      "category": "main",
+      "source": {
+        "kind": "generator",
+        "method": "test_QV_100_transpile",
+        "path": "benchpress/qiskit_gym/device_transpile/test_summit.py",
+        "sha256": "ef3e406a7b61a9fcee3a5dd764896f140903671c91045c7367305f49ab500df6"
+      },
+      "aliases": [],
+      "planning_case_weight": "5/1536",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/small/qpe_n9",
+      "declared_width": 9,
+      "family": "F1",
+      "band": "S",
+      "recipe": "phase-estimation",
+      "category": "screening",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-small/qpe_n9/qpe_n9.qasm",
+        "sha256": "b341d904913f8a41f22fee387a7939ec9b43873e5f2efeb739d57317ef2b4523"
+      },
+      "aliases": [],
+      "planning_case_weight": "0",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/medium/bv_n14",
+      "declared_width": 14,
+      "family": "F3",
+      "band": "S",
+      "recipe": "BV",
+      "category": "screening",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-medium/bv_n14/bv_n14.qasm",
+        "sha256": "c98cf8b70ed55423525f55bebe8293fd69a97a33472d83cbf5d39693b6ed5e14"
+      },
+      "aliases": [],
+      "planning_case_weight": "0",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/medium/cc_n12",
+      "declared_width": 12,
+      "family": "F3",
+      "band": "S",
+      "recipe": "counterfeit-coin",
+      "category": "screening",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-medium/cc_n12/cc_n12.qasm",
+        "sha256": "67cd81d8392049d251e32e4ad1d7399706c054f829f1ab347c3995fe72d914af"
+      },
+      "aliases": [],
+      "planning_case_weight": "0",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/bv_n30",
+      "declared_width": 30,
+      "family": "F3",
+      "band": "M",
+      "recipe": "BV",
+      "category": "screening",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/bv_n30/bv_n30.qasm",
+        "sha256": "a9f50bd7aecba85c5148d621c91fab9a9d940cf34f9463982366b77228027ade"
+      },
+      "aliases": [],
+      "planning_case_weight": "0",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_7-uf20-0384.cnf-8-res",
+      "declared_width": 8,
+      "family": "F5",
+      "band": "S",
+      "recipe": "SAT-Hamiltonian",
+      "category": "screening",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_7-uf20-0384.cnf-8-res",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/7-uf20-0384.cnf-8-res,",
+        "ham_problem": "uf20-ham",
+        "ham_qubits": 8,
+        "ham_terms": 30
+      },
+      "aliases": [],
+      "planning_case_weight": "0",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_mu_x_prime_enc_stdbinary_dvalues_8-8-8-8-8-8-8-8-8-4-4-4-4-4-4",
+      "declared_width": 11,
+      "family": "F7",
+      "band": "S",
+      "recipe": "molecule:all-vib-cyclo_propene",
+      "category": "screening",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_mu_x_prime_enc_stdbinary_dvalues_8-8-8-8-8-8-8-8-8-4-4-4-4-4-4",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/mu_x_prime_enc_stdbinary_dvalues_8-8-8-8-8-8-8-8-8-4-4-4-4-4-4,",
+        "ham_problem": "all-vib-cyclo_propene",
+        "ham_qubits": 11,
+        "ham_terms": 40
+      },
+      "aliases": [],
+      "planning_case_weight": "0",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/medium/knn_n25",
+      "declared_width": 25,
+      "family": "F3",
+      "band": "M",
+      "recipe": "swap-test-kNN",
+      "category": "screening",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-medium/knn_n25/knn_n25.qasm",
+        "sha256": "44d66b3aaca346922c64a61316bf166278621667e804fd59ea40eb465c33e678"
+      },
+      "aliases": [],
+      "planning_case_weight": "0",
+      "structural_canonical": "Q/medium/swap_test_n25",
+      "alias_sources": []
+    },
+    {
+      "input_id": "Q/large/knn_n41",
+      "declared_width": 41,
+      "family": "F3",
+      "band": "M",
+      "recipe": "swap-test-kNN",
+      "category": "screening",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/knn_n41/knn_n41.qasm",
+        "sha256": "0b62f07ebd93d7a043e26669a353b3534661c4b26eab54d206e9d5dae792543e"
+      },
+      "aliases": [],
+      "planning_case_weight": "0",
+      "structural_canonical": "Q/large/swap_test_n41",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_ham_JW10",
+      "declared_width": 10,
+      "family": "F7",
+      "band": "S",
+      "recipe": "molecule:OH",
+      "category": "screening",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_ham_JW10",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/ham_JW10,",
+        "ham_problem": "OH",
+        "ham_qubits": 10,
+        "ham_terms": 276
+      },
+      "aliases": [],
+      "planning_case_weight": "0",
+      "structural_canonical": "H/ham_ham_JW-10",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_tsp_prob-st70_Ncity-10_enc-unary",
+      "declared_width": 100,
+      "family": "F5",
+      "band": "L",
+      "recipe": "TSP-Hamiltonian",
+      "category": "screening",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_tsp_prob-st70_Ncity-10_enc-unary",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/tsp_prob-st70_Ncity-10_enc-unary,",
+        "ham_problem": "TSP_Ncity-10",
+        "ham_qubits": 100,
+        "ham_terms": 1001
+      },
+      "aliases": [],
+      "planning_case_weight": "0",
+      "structural_canonical": "H/ham_tsp_prob-pr76_Ncity-10_enc-unary",
+      "alias_sources": []
+    },
+    {
+      "input_id": "H/ham_tsp_prob-kroD100_Ncity-16_enc-stdbinary",
+      "declared_width": 64,
+      "family": "F5",
+      "band": "M",
+      "recipe": "TSP-Hamiltonian",
+      "category": "screening",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_tsp_prob-kroD100_Ncity-16_enc-stdbinary",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/tsp_prob-kroD100_Ncity-16_enc-stdbinary,",
+        "ham_problem": "TSP_Ncity-16",
+        "ham_qubits": 64,
+        "ham_terms": 3841
+      },
+      "aliases": [],
+      "planning_case_weight": "0",
+      "structural_canonical": "H/ham_tsp_prob-fl417_Ncity-16_enc-stdbinary",
+      "alias_sources": []
+    }
+  ],
+  "coverage": [
+    {
+      "input_id": "S/test_square_heisenberg_100_transpile",
+      "declared_width": 100,
+      "family": "F6",
+      "band": "L",
+      "recipe": "Heisenberg",
+      "category": "coverage",
+      "source": {
+        "kind": "qasm",
+        "method": "test_square_heisenberg_100_transpile",
+        "path": "benchpress/qasm/square-heisenberg/square_heisenberg_N100.qasm",
+        "sha256": "51f749814162f7db7d8d7ea8317b801e1aee8930f41567bea577e2beb70fb04e"
+      },
+      "reason": "known square embedding",
+      "main_weight": {
+        "numerator": 0,
+        "denominator": 1
+      }
+    },
+    {
+      "input_id": "H/ham_graph-1D-grid-pbc-qubitnodes_Lx-16_h-2",
+      "declared_width": 16,
+      "family": "F6",
+      "band": "S",
+      "recipe": "TFIM",
+      "category": "coverage",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_graph-1D-grid-pbc-qubitnodes_Lx-16_h-2",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/graph-1D-grid-pbc-qubitnodes_Lx-16_h-2,",
+        "ham_problem": "tfim",
+        "ham_qubits": 16,
+        "ham_terms": 32
+      },
+      "reason": "known synthetic embeddings",
+      "main_weight": {
+        "numerator": 0,
+        "denominator": 1
+      }
+    },
+    {
+      "input_id": "H/ham_graph-1D-grid-pbc-qubitnodes_Lx-26_h-6",
+      "declared_width": 26,
+      "family": "F6",
+      "band": "M",
+      "recipe": "TFIM",
+      "category": "coverage",
+      "source": {
+        "kind": "hamlib",
+        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
+        "base_id": "ham_graph-1D-grid-pbc-qubitnodes_Lx-26_h-6",
+        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
+        "ham_instance": "/graph-1D-grid-pbc-qubitnodes_Lx-26_h-6,",
+        "ham_problem": "tfim",
+        "ham_qubits": 26,
+        "ham_terms": 52
+      },
+      "reason": "known synthetic embeddings",
+      "main_weight": {
+        "numerator": 0,
+        "denominator": 1
+      }
+    },
+    {
+      "input_id": "Q/small/dnn_n8",
+      "declared_width": 8,
+      "family": "F4",
+      "band": "S",
+      "recipe": "DNN-hub",
+      "category": "coverage",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-small/dnn_n8/dnn_n8.qasm",
+        "sha256": "7f1f342a59a7a9159a2f0fa619b8a64170a159158ae838eaa75b13212cf2a161"
+      },
+      "reason": "known square embedding",
+      "main_weight": {
+        "numerator": 0,
+        "denominator": 1
+      }
+    },
+    {
+      "input_id": "S/test_circSU2_100_transpile",
+      "declared_width": 100,
+      "family": "F4",
+      "band": "L",
+      "recipe": "circular-SU2",
+      "category": "coverage",
+      "source": {
+        "kind": "generator",
+        "method": "test_circSU2_100_transpile",
+        "path": "benchpress/qiskit_gym/device_transpile/test_summit.py",
+        "sha256": "ef3e406a7b61a9fcee3a5dd764896f140903671c91045c7367305f49ab500df6"
+      },
+      "reason": "known FakeTorino embedding",
+      "main_weight": {
+        "numerator": 0,
+        "denominator": 1
+      }
+    },
+    {
+      "input_id": "Q/medium/dnn_n16",
+      "declared_width": 16,
+      "family": "F4",
+      "band": "S",
+      "recipe": "DNN-hub",
+      "category": "coverage",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-medium/dnn_n16/dnn_n16.qasm",
+        "sha256": "c194be8740c380fc9679ebcca2515ac52215aea1c58dc5cfc507679a88c64d79"
+      },
+      "reason": "known synthetic embeddings",
+      "main_weight": {
+        "numerator": 0,
+        "denominator": 1
+      }
+    },
+    {
+      "input_id": "Q/large/ising_n98",
+      "declared_width": 98,
+      "family": "F6",
+      "band": "L",
+      "recipe": "Ising",
+      "category": "coverage",
+      "source": {
+        "kind": "qasm",
+        "path": "benchpress/qasm/qasmbench-large/ising_n98/ising_n98.qasm",
+        "sha256": "a5df0fa957b250a59561348cf0d3b30f01626634b33cfbaea09d32f770a5f8af"
+      },
+      "reason": "known embeddable chain",
+      "main_weight": {
+        "numerator": 0,
+        "denominator": 1
+      }
+    },
+    {
+      "input_id": "S/test_BVlike_simplification_transpile",
+      "declared_width": 100,
+      "family": "F3",
+      "band": "L",
+      "recipe": "BV",
+      "category": "coverage",
+      "source": {
+        "kind": "generator",
+        "method": "test_BVlike_simplification_transpile",
+        "path": "benchpress/qiskit_gym/device_transpile/test_summit.py",
+        "sha256": "ef3e406a7b61a9fcee3a5dd764896f140903671c91045c7367305f49ab500df6"
+      },
+      "reason": "zero two-qubit workload after initialization",
+      "main_weight": {
+        "numerator": 0,
+        "denominator": 1
+      }
+    }
+  ],
+  "supporting_assets": [
+    {
+      "path": "benchpress/qiskit_gym/circuits/circuits.py",
+      "sha256": "32b06aa7a906ec55b2658feedb9695183df0097d961913079aae519a8164a84d"
+    }
+  ]
+}

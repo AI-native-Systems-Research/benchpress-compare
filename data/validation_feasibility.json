@@ -1,0 +1,297 @@
+{
+  "schema_version": 1,
+  "scope": "disposable compatibility spike; not admission evidence or benchmark comparison",
+  "qiskit": "2.5.2",
+  "corpus_revision": "4c04b38a53fc231a89f1a6bc9541c1b641ed6dcf",
+  "full_corpus_semantics_status": "blocked",
+  "reason": "scalable semantic certificates required beyond exact oracle bounds",
+  "observations": [
+    {
+      "input_id": "Q/medium/cc_n12",
+      "fixture_hash": "4033895eb2e51ea91ea4b956e0e640207789aa90dfc306079215ca9e0de63621",
+      "target_hash": "504627be73b08b96c2b5e6d0d8e1d22d4f62062536d09c369864656b4a092918",
+      "target_class": "square",
+      "level": 2,
+      "seed": 159,
+      "status": "INVALID",
+      "N2": 36,
+      "D2": 30,
+      "validation": {
+        "checks": {
+          "layout": {
+            "covers": [
+              "layout_injectivity",
+              "capacity"
+            ],
+            "status": "verified"
+          },
+          "routing": {
+            "boundaries": 1,
+            "covers": [
+              "all_executed_sabre_boundaries"
+            ],
+            "status": "verified"
+          },
+          "semantics": {
+            "active_physical_width": 12,
+            "logical_width": 12,
+            "reason": "semantic_certificate_required",
+            "scope": {
+              "ancillas": "zero",
+              "classical_outputs": "all",
+              "input_state": "arbitrary",
+              "max_logical_qubits": 4,
+              "max_physical_qubits": 6,
+              "method": "exact_matrix_unit_instrument"
+            },
+            "status": "unsupported"
+          },
+          "target_legality": {
+            "covers": [
+              "recursive_native_legality",
+              "directed_instruction_support"
+            ],
+            "status": "verified"
+          }
+        },
+        "status": "unsupported"
+      },
+      "native_calls": [
+        {
+          "effective_trials": {
+            "num_random_trials": 20,
+            "num_swap_trials": 20
+          },
+          "function": "sabre_layout_and_routing",
+          "max_iterations": 2,
+          "partial_start_count": 0,
+          "replay": {
+            "covers": [
+              "routing",
+              "measurement",
+              "reset",
+              "branch_permutations"
+            ],
+            "final_mapping": [
+              12,
+              13,
+              2,
+              0,
+              14,
+              1,
+              5,
+              3,
+              8,
+              11,
+              10,
+              7,
+              15,
+              9,
+              4,
+              6
+            ],
+            "inserted_swaps": 8,
+            "status": "verified"
+          },
+          "seed": 159,
+          "skip_routing": false
+        }
+      ],
+      "inserted_swaps": 8
+    },
+    {
+      "input_id": "Q/medium/qec9xz_n17",
+      "fixture_hash": "177d366d6f3c6dd02c263831bfa7ded389c4d5ebdc0562d48181f3b5637ed5a5",
+      "target_hash": "ca5f35a9ae90e9ef113a422000f8666e556891c30f30fd8d47b0295afa8e964b",
+      "target_class": "square",
+      "level": 2,
+      "seed": 159,
+      "status": "INVALID",
+      "N2": 69,
+      "D2": 29,
+      "validation": {
+        "checks": {
+          "layout": {
+            "covers": [
+              "layout_injectivity",
+              "capacity"
+            ],
+            "status": "verified"
+          },
+          "routing": {
+            "boundaries": 1,
+            "covers": [
+              "all_executed_sabre_boundaries"
+            ],
+            "status": "verified"
+          },
+          "semantics": {
+            "active_physical_width": 18,
+            "logical_width": 17,
+            "reason": "semantic_certificate_required",
+            "scope": {
+              "ancillas": "zero",
+              "input_state": "arbitrary",
+              "max_logical_qubits": 8,
+              "max_physical_qubits": 14,
+              "method": "exact_basis_isometry"
+            },
+            "status": "unsupported"
+          },
+          "target_legality": {
+            "covers": [
+              "recursive_native_legality",
+              "directed_instruction_support"
+            ],
+            "status": "verified"
+          }
+        },
+        "status": "unsupported"
+      },
+      "native_calls": [
+        {
+          "effective_trials": {
+            "num_random_trials": 20,
+            "num_swap_trials": 20
+          },
+          "function": "sabre_layout_and_routing",
+          "max_iterations": 2,
+          "partial_start_count": 0,
+          "replay": {
+            "covers": [
+              "routing",
+              "measurement",
+              "reset",
+              "branch_permutations"
+            ],
+            "final_mapping": [
+              17,
+              18,
+              19,
+              10,
+              20,
+              13,
+              6,
+              1,
+              2,
+              21,
+              14,
+              8,
+              0,
+              4,
+              9,
+              7,
+              16,
+              3,
+              15,
+              23,
+              24,
+              22,
+              11,
+              5,
+              12
+            ],
+            "inserted_swaps": 13,
+            "status": "verified"
+          },
+          "seed": 159,
+          "skip_routing": false
+        }
+      ],
+      "inserted_swaps": 13
+    },
+    {
+      "input_id": "Q/medium/seca_n11",
+      "fixture_hash": "adb4e2be5c4a12bf5502abd98c545a47c5266cbc96dd12f97c562286b4113b21",
+      "target_hash": "504627be73b08b96c2b5e6d0d8e1d22d4f62062536d09c369864656b4a092918",
+      "target_class": "square",
+      "level": 2,
+      "seed": 159,
+      "status": "INVALID",
+      "N2": 125,
+      "D2": 77,
+      "validation": {
+        "checks": {
+          "layout": {
+            "covers": [
+              "layout_injectivity",
+              "capacity"
+            ],
+            "status": "verified"
+          },
+          "routing": {
+            "boundaries": 1,
+            "covers": [
+              "all_executed_sabre_boundaries"
+            ],
+            "status": "verified"
+          },
+          "semantics": {
+            "active_physical_width": 12,
+            "logical_width": 11,
+            "reason": "semantic_certificate_required",
+            "scope": {
+              "ancillas": "zero",
+              "classical_outputs": "all",
+              "input_state": "arbitrary",
+              "max_logical_qubits": 4,
+              "max_physical_qubits": 6,
+              "method": "exact_matrix_unit_instrument"
+            },
+            "status": "unsupported"
+          },
+          "target_legality": {
+            "covers": [
+              "recursive_native_legality",
+              "directed_instruction_support"
+            ],
+            "status": "verified"
+          }
+        },
+        "status": "unsupported"
+      },
+      "native_calls": [
+        {
+          "effective_trials": {
+            "num_random_trials": 20,
+            "num_swap_trials": 20
+          },
+          "function": "sabre_layout_and_routing",
+          "max_iterations": 2,
+          "partial_start_count": 0,
+          "replay": {
+            "covers": [
+              "routing",
+              "measurement",
+              "reset",
+              "branch_permutations"
+            ],
+            "final_mapping": [
+              7,
+              11,
+              12,
+              13,
+              8,
+              6,
+              14,
+              15,
+              9,
+              3,
+              10,
+              5,
+              0,
+              1,
+              2,
+              4
+            ],
+            "inserted_swaps": 17,
+            "status": "verified"
+          },
+          "seed": 159,
+          "skip_routing": false
+        }
+      ],
+      "inserted_swaps": 17
+    }
+  ]
+}

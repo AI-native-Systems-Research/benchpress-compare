@@ -1,0 +1,1054 @@
+{
+  "schema_version": 1,
+  "scope": "asset integrity, typed logical roundtrip, active width; not admission or semantic validation",
+  "corpus_revision": "4c04b38a53fc231a89f1a6bc9541c1b641ed6dcf",
+  "python": "3.12.12",
+  "qiskit": "2.5.2",
+  "candidate_count": 149,
+  "fixture_roundtrip_verified": 149,
+  "rows": [
+    {
+      "input_id": "Q/medium/qft_n18",
+      "status": "verified",
+      "declared": 18,
+      "active": 18,
+      "hash": "c8525e75320c16ce0e8e7f45608182cccbaaa5d04058ae2ac292912e0f038685"
+    },
+    {
+      "input_id": "Q/medium/factor247_n15",
+      "status": "verified",
+      "declared": 15,
+      "active": 15,
+      "hash": "bd873b4ee3ac4d2fa8ba72a1f41a7e18089fa8b80b39867d560137ce95f13faf"
+    },
+    {
+      "input_id": "Q/medium/qf21_n15",
+      "status": "verified",
+      "declared": 15,
+      "active": 15,
+      "hash": "c47ff50eef01326f906412be53e4f29e4cb0846f82a7c1ce9bb902eb54ca815d"
+    },
+    {
+      "input_id": "Q/large/qft_n29",
+      "status": "verified",
+      "declared": 29,
+      "active": 29,
+      "hash": "764fab5d9dc34eb6f3964df7e8aacf12e5f983b60139fb311dea6e1eeee13dce"
+    },
+    {
+      "input_id": "Q/large/qft_n63",
+      "status": "verified",
+      "declared": 63,
+      "active": 63,
+      "hash": "afe40f74b8f05fdb7159b569e7d4515f0c386dff4f7a9c1dbd7e46e944b1cadb"
+    },
+    {
+      "input_id": "S/test_QFT_100_transpile",
+      "status": "verified",
+      "declared": 100,
+      "active": 100,
+      "hash": "4c18749bf0fa1a6aadf75ef6d47b6530ba5d96290b18727340dc15c7ae4272f4"
+    },
+    {
+      "input_id": "Q/medium/bigadder_n18",
+      "status": "verified",
+      "declared": 18,
+      "active": 18,
+      "hash": "433ee3eb808295e2a3133f0429466f71f4464155adec9da11ebf6491efed3b16"
+    },
+    {
+      "input_id": "F/qcla_com_7.qasm",
+      "status": "verified",
+      "declared": 24,
+      "active": 24,
+      "hash": "ffe9a1b9d7f4964e4971aaec76ab3da98e50675c823888020d02bb899f527393"
+    },
+    {
+      "input_id": "F/csla_mux_3.qasm",
+      "status": "verified",
+      "declared": 15,
+      "active": 15,
+      "hash": "afda3ae1da3dbecf1b201ce0c12ec1fe5273827693ed44ec00f3e69a0df8a792"
+    },
+    {
+      "input_id": "Q/medium/multiply_n13",
+      "status": "verified",
+      "declared": 13,
+      "active": 13,
+      "hash": "9845302fc296c3abc231d53b399fb5434ad5484f40208c4ac42595afe80fd9d6"
+    },
+    {
+      "input_id": "F/gf2^4_mult.qasm",
+      "status": "verified",
+      "declared": 12,
+      "active": 12,
+      "hash": "32ee8f1048f02f6a9a331f8a18c7138a1224bdb34bc01c879cac10f602f1942f"
+    },
+    {
+      "input_id": "F/gf2^5_mult.qasm",
+      "status": "verified",
+      "declared": 15,
+      "active": 15,
+      "hash": "69f603debb9bc38279457baa8dc7cc586ebfe10ce7e3eae53c6de9d876f09af4"
+    },
+    {
+      "input_id": "F/gf2^6_mult.qasm",
+      "status": "verified",
+      "declared": 18,
+      "active": 18,
+      "hash": "34bc3988b8a707db58fd2578fac44a9443eaf1862dccf582b626fef05b86011c"
+    },
+    {
+      "input_id": "F/gf2^7_mult.qasm",
+      "status": "verified",
+      "declared": 21,
+      "active": 21,
+      "hash": "3b526bcc3268dd982e0da33e8af8fc93720b3958427b37e7ec5fccdbd5b912cc"
+    },
+    {
+      "input_id": "F/gf2^8_mult.qasm",
+      "status": "verified",
+      "declared": 24,
+      "active": 24,
+      "hash": "7801de14afee281392ad791db5c8cab62f93c175555f8c7277601725c0e713a6"
+    },
+    {
+      "input_id": "Q/medium/multiplier_n15",
+      "status": "verified",
+      "declared": 15,
+      "active": 15,
+      "hash": "583381d496925efe08273d01c09a9eb431adbd577989bf644adc1203d306f209"
+    },
+    {
+      "input_id": "F/mod_mult_55.qasm",
+      "status": "verified",
+      "declared": 9,
+      "active": 9,
+      "hash": "7962bbb986611e150db8af8ac85ad35d52d21f9880a0cbfdc8096bbc6c7c1529"
+    },
+    {
+      "input_id": "F/mod_red_21.qasm",
+      "status": "verified",
+      "declared": 11,
+      "active": 11,
+      "hash": "5a6adcdb91d3d0d1d347c39a3d512e871281c511e6633d002c1ebb065166e556"
+    },
+    {
+      "input_id": "F/vbe_adder_3.qasm",
+      "status": "verified",
+      "declared": 10,
+      "active": 10,
+      "hash": "939941ca80f25ca2cb40ee43492bb0877ffca4a3d438956ffbc40a19a3e20a46"
+    },
+    {
+      "input_id": "Q/small/adder_n10",
+      "status": "verified",
+      "declared": 10,
+      "active": 10,
+      "hash": "8f7ff4fc304df9354c71c1a2d790a3990cefadb58f2089da2a8d098f472457b6"
+    },
+    {
+      "input_id": "F/rc_adder_6.qasm",
+      "status": "verified",
+      "declared": 14,
+      "active": 14,
+      "hash": "b57444ac9c971a51c9d014e9fc53a01f4d844cda20dbbf2d474114643d5d7c74"
+    },
+    {
+      "input_id": "F/adder_8.qasm",
+      "status": "verified",
+      "declared": 24,
+      "active": 24,
+      "hash": "12d7795c7583f271c96dd475df76e48c99f6465f744792f88ae7d206ef8abfaa"
+    },
+    {
+      "input_id": "Q/medium/square_root_n18",
+      "status": "verified",
+      "declared": 18,
+      "active": 18,
+      "hash": "452d8d17209c6a5bc06426a8821d5f2f61b71b304ccc77da23fcce7635f0039a"
+    },
+    {
+      "input_id": "F/qcla_mod_7.qasm",
+      "status": "verified",
+      "declared": 26,
+      "active": 26,
+      "hash": "872c285fe300ca13a2008191b5b5307eca413bfa8b281e184ff97aa4d4ad5d9d"
+    },
+    {
+      "input_id": "F/qcla_adder_10.qasm",
+      "status": "verified",
+      "declared": 36,
+      "active": 36,
+      "hash": "007c02e186d7b57bb4b58d7c7d032ce15693da4e3a03e384142ba0e5d30fcc7c"
+    },
+    {
+      "input_id": "F/csum_mux_9.qasm",
+      "status": "verified",
+      "declared": 30,
+      "active": 30,
+      "hash": "c0b563532e845655f680128394018dca6dee87c8b1f39af5279169554c00e7c5"
+    },
+    {
+      "input_id": "F/gf2^9_mult.qasm",
+      "status": "verified",
+      "declared": 27,
+      "active": 27,
+      "hash": "f3ca91815d2e87961640669094ae90ea267de024efdbe78adf677f6fb93b1d62"
+    },
+    {
+      "input_id": "F/gf2^10_mult.qasm",
+      "status": "verified",
+      "declared": 30,
+      "active": 30,
+      "hash": "2d3bc9ac53a87e8dd8b64d6738ec928b8b31536b92d2fba547dfd57661ca671e"
+    },
+    {
+      "input_id": "F/gf2^16_mult.qasm",
+      "status": "verified",
+      "declared": 48,
+      "active": 48,
+      "hash": "fdec701a86c45e0f672b018ccd3d63ffd876729fad18f552047db683a12463c5"
+    },
+    {
+      "input_id": "Q/large/multiplier_n45",
+      "status": "verified",
+      "declared": 45,
+      "active": 45,
+      "hash": "26ae82a78790991951fa34fbff74917231ce3c944821cee937f0179e184c5cb0"
+    },
+    {
+      "input_id": "F/mod_adder_1024.qasm",
+      "status": "verified",
+      "declared": 28,
+      "active": 28,
+      "hash": "948379d6f080e5b36beedf659f443bb40071d5c974f8a89f027737fbd2b3d330"
+    },
+    {
+      "input_id": "Q/large/adder_n28",
+      "status": "verified",
+      "declared": 28,
+      "active": 28,
+      "hash": "7d116727452e3cb96aaa6b18bd6565b32dd691346f63d71ce330836c81619580"
+    },
+    {
+      "input_id": "Q/large/adder_n64",
+      "status": "verified",
+      "declared": 64,
+      "active": 64,
+      "hash": "9bf862d9ad2c6ea57ca3fe26e177fbfa60eccaee1e80d28d91d0bcb7e6f882b9"
+    },
+    {
+      "input_id": "Q/large/square_root_n45",
+      "status": "verified",
+      "declared": 45,
+      "active": 45,
+      "hash": "c1a7550a72db8d7e3da42ed82327d806d136358796f32a8ed92ca4f51a814e55"
+    },
+    {
+      "input_id": "Q/large/square_root_n60",
+      "status": "verified",
+      "declared": 60,
+      "active": 60,
+      "hash": "882b764f12716bea9ddc4eefb72972af0750251ffb6381bc2fdbf862e4b3815c"
+    },
+    {
+      "input_id": "F/gf2^32_mult.qasm",
+      "status": "verified",
+      "declared": 96,
+      "active": 96,
+      "hash": "fe35eab970574b6a696b39b47ef42b732436f69bc83eb560eecd5bf8e1b8003d"
+    },
+    {
+      "input_id": "Q/large/multiplier_n75",
+      "status": "verified",
+      "declared": 75,
+      "active": 75,
+      "hash": "b7bdef7dae23d647c3da9655634f5ee7f618ee909e8e6dcd8f037b5b6ea8701a"
+    },
+    {
+      "input_id": "Q/large/adder_n118",
+      "status": "verified",
+      "declared": 118,
+      "active": 118,
+      "hash": "6bbb4ce27780f509a85266bc92446b8cad3cfb19553cec422a5d825666e73659"
+    },
+    {
+      "input_id": "Q/medium/bv_n19",
+      "status": "verified",
+      "declared": 19,
+      "active": 19,
+      "hash": "cde8f1b5b5c5d46bd3a6356b1b33b7274e41edcdc9d024fdee844e6f33eb9fe4"
+    },
+    {
+      "input_id": "F/grover_5.qasm",
+      "status": "verified",
+      "declared": 9,
+      "active": 9,
+      "hash": "85523ced580f7921ded0835e81a463de803d39a9ffe75913b09317872aa4765e"
+    },
+    {
+      "input_id": "F/ham15-low.qasm",
+      "status": "verified",
+      "declared": 17,
+      "active": 17,
+      "hash": "c140454ac69e5494e51d2862300d231458377313666b616216c70b958b74ddc1"
+    },
+    {
+      "input_id": "F/ham15-med.qasm",
+      "status": "verified",
+      "declared": 17,
+      "active": 17,
+      "hash": "c29e5395dc3890f27a91c6e0bfa51a4afc6f13fc95d63e4eb5f1f609699ef1a9"
+    },
+    {
+      "input_id": "F/ham15-high.qasm",
+      "status": "verified",
+      "declared": 20,
+      "active": 20,
+      "hash": "d5a2c96f7eab4c06fb643454bb37d1ce97f2d622f6f4d75c73deaa8a36155339"
+    },
+    {
+      "input_id": "F/hwb8.qasm",
+      "status": "verified",
+      "declared": 12,
+      "active": 12,
+      "hash": "6bad4b5a65c24e919d3ff411e60f5dbf09a902f3599acf0eb81e087230def2e6"
+    },
+    {
+      "input_id": "F/hwb11.qasm",
+      "status": "verified",
+      "declared": 15,
+      "active": 15,
+      "hash": "b40ca1856230b76cfeb3cd1e5af54a3dc3dacd65456853f68b69857a14f5825b"
+    },
+    {
+      "input_id": "F/hwb10.qasm",
+      "status": "verified",
+      "declared": 16,
+      "active": 16,
+      "hash": "53d566f75c382e82fa2c4ddd2e13d0a4fe9116cef9e0f4e5d59b9d1059824f57"
+    },
+    {
+      "input_id": "F/hwb12.qasm",
+      "status": "verified",
+      "declared": 20,
+      "active": 20,
+      "hash": "5018573d0cd3c1bbf346fb4c3a81bb5c49bf9ac2265a3f0656d00b9dd07f9d2e"
+    },
+    {
+      "input_id": "F/barenco_tof_5.qasm",
+      "status": "verified",
+      "declared": 9,
+      "active": 9,
+      "hash": "017fd75c6ff78fdd65ad9d68565e398c291d3eda46f3666cab1126a2b3fd8dec"
+    },
+    {
+      "input_id": "F/tof_5.qasm",
+      "status": "verified",
+      "declared": 9,
+      "active": 9,
+      "hash": "93448d7f90bd995fed071192a2f5d2e8529d70dd234d942dca3db122f79b4024"
+    },
+    {
+      "input_id": "F/barenco_tof_10.qasm",
+      "status": "verified",
+      "declared": 19,
+      "active": 19,
+      "hash": "07a0de47b644202b543271fc1f9a55ba9cef0c8c28db7cac0fea182077508764"
+    },
+    {
+      "input_id": "F/tof_10.qasm",
+      "status": "verified",
+      "declared": 19,
+      "active": 19,
+      "hash": "538a7567b56ad7ca5b15b9f5d93b6c591f3e00e6bacb78f0b2da10f9540bc9c0"
+    },
+    {
+      "input_id": "Q/medium/seca_n11",
+      "status": "verified",
+      "declared": 11,
+      "active": 11,
+      "hash": "adb4e2be5c4a12bf5502abd98c545a47c5266cbc96dd12f97c562286b4113b21"
+    },
+    {
+      "input_id": "Q/medium/qec9xz_n17",
+      "status": "verified",
+      "declared": 17,
+      "active": 17,
+      "hash": "177d366d6f3c6dd02c263831bfa7ded389c4d5ebdc0562d48181f3b5637ed5a5"
+    },
+    {
+      "input_id": "Q/medium/qram_n20",
+      "status": "verified",
+      "declared": 20,
+      "active": 20,
+      "hash": "6aaa097e6d378eb4d3b2557b5ba91817be1618f9d437d812f43f1c18892b0d91"
+    },
+    {
+      "input_id": "Q/large/cc_n32",
+      "status": "verified",
+      "declared": 32,
+      "active": 32,
+      "hash": "1311f8f9c39ca51bcee51da023db35010acf88dbe143b38cf161788f7b847667"
+    },
+    {
+      "input_id": "Q/large/cc_n64",
+      "status": "verified",
+      "declared": 64,
+      "active": 64,
+      "hash": "6282305a3c4868ef2c98534d23de15c3cd592a487dbbe2d824294ebd64214e87"
+    },
+    {
+      "input_id": "Q/medium/swap_test_n25",
+      "status": "verified",
+      "declared": 25,
+      "active": 25,
+      "hash": "c9e2d3cda589e1de45bd23f29b20854ffb23deca146f803b4ba25e0eb674ae75"
+    },
+    {
+      "input_id": "Q/large/knn_n31",
+      "status": "verified",
+      "declared": 31,
+      "active": 31,
+      "hash": "55ba5eb4df300248df62210bbde591e5801260567b3688224d633c8acfa83404"
+    },
+    {
+      "input_id": "Q/large/swap_test_n41",
+      "status": "verified",
+      "declared": 41,
+      "active": 41,
+      "hash": "19537d177bac81a8841ccdcae1acebf083b1d2f1eb8e80b74d63b8d129ca110c"
+    },
+    {
+      "input_id": "Q/large/bv_n70",
+      "status": "verified",
+      "declared": 70,
+      "active": 70,
+      "hash": "4c390729e051fade82c7e043d91581c1a01535dae266192562553ceef8cb146e"
+    },
+    {
+      "input_id": "S/test_BV_100_transpile",
+      "status": "verified",
+      "declared": 100,
+      "active": 100,
+      "hash": "ae66f91f566591291797913fa3cbe2e958c7e4f4bfee3e99e8609c4205689e99"
+    },
+    {
+      "input_id": "Q/large/knn_n67",
+      "status": "verified",
+      "declared": 67,
+      "active": 67,
+      "hash": "72a1e7c929288ab1b12e9da6035953da75a253116a9ca4e9b1e5f76049bf7116"
+    },
+    {
+      "input_id": "Q/large/swap_test_n83",
+      "status": "verified",
+      "declared": 83,
+      "active": 83,
+      "hash": "1ec97408a8d9540054ce48c04d06948182aed53195cf302fe2d6cbcceca04af3"
+    },
+    {
+      "input_id": "Q/large/swap_test_n115",
+      "status": "verified",
+      "declared": 115,
+      "active": 115,
+      "hash": "eb0eb90193e05b983e39e248131bd161bfe57a57e4b567edd1700b6b171db8f5"
+    },
+    {
+      "input_id": "Q/large/knn_129",
+      "status": "verified",
+      "declared": 129,
+      "active": 129,
+      "hash": "22fef24dc247d737aa0650c8ece60f7d8fb6a7195293d8df052a786f40f38935"
+    },
+    {
+      "input_id": "Q/large/dnn_n33",
+      "status": "verified",
+      "declared": 33,
+      "active": 33,
+      "hash": "f5e0481b0cc5843df75e7f7bf37784e58a5995423f0a12a2b7137527aed6a5cd"
+    },
+    {
+      "input_id": "Q/large/dnn_n51",
+      "status": "verified",
+      "declared": 51,
+      "active": 51,
+      "hash": "e7ed115a9e04c42d26aaf53891defdf3c524860904d1103cf558eb9abf4a5e00"
+    },
+    {
+      "input_id": "Q/large/qugan_n39",
+      "status": "verified",
+      "declared": 39,
+      "active": 39,
+      "hash": "29b208f5bc18f998d0ad196d49484d3feeaa9d85c12b02feabf633eb4e50b1a3"
+    },
+    {
+      "input_id": "Q/large/qugan_n71",
+      "status": "verified",
+      "declared": 71,
+      "active": 71,
+      "hash": "03fbd46eab9d8f5b0d5f077794512576502cf7b81aceedc194fe766d8507069a"
+    },
+    {
+      "input_id": "Q/large/qugan_n111",
+      "status": "verified",
+      "declared": 111,
+      "active": 111,
+      "hash": "e0fd082e69c91b5be3dc852b72378ed4786ac9a3dc0da7c186c3cbd42260ef18"
+    },
+    {
+      "input_id": "S/test_circSU2_89_transpile",
+      "status": "verified",
+      "declared": 89,
+      "active": 89,
+      "hash": "cc0b096ae9295a3dfa4b6d1f0b95799f2942d7b38a3c194dc69e27ce523155d3"
+    },
+    {
+      "input_id": "H/ham_gnp-k_5_n-24_rinst-04",
+      "status": "verified",
+      "declared": 24,
+      "active": 24,
+      "hash": "8e7fef80fed62fd49d4b6674c39d4aafe70863df357a7ab836c1f723d1486ad5"
+    },
+    {
+      "input_id": "Q/medium/sat_n11",
+      "status": "verified",
+      "declared": 11,
+      "active": 11,
+      "hash": "b7398222ae6f93737829d6ec934a1824284682878fd22aef20f283452dd83e2a"
+    },
+    {
+      "input_id": "H/ham_tsp_rand-002_Ncity-4_enc-stdbinary",
+      "status": "verified",
+      "declared": 8,
+      "active": 8,
+      "hash": "57e4ded47548a489d9da7e5387500dd38a1667fc8d7a92827c4b2165fb896933"
+    },
+    {
+      "input_id": "H/ham_tsp_prob-ulysses22_Ncity-8_enc-stdbinary",
+      "status": "verified",
+      "declared": 24,
+      "active": 24,
+      "hash": "7ebfaec132ccf22734120ebc4fb5a6293026ad7d1e3881297eab7e0a2c4cd963"
+    },
+    {
+      "input_id": "H/ham_complbipart-n-10_a-5_b-5",
+      "status": "verified",
+      "declared": 10,
+      "active": 10,
+      "hash": "0e6eadaf57127f0126a0906e19db63d6063cb7bcacda8918afbeb0a36f57a544"
+    },
+    {
+      "input_id": "H/ham_reg-5_n-10_rinst-07",
+      "status": "verified",
+      "declared": 30,
+      "active": 30,
+      "hash": "c63f984e155da46d2cfc40767f34dfdcae8d25ca5a81ed0dc9d8cd509d188341"
+    },
+    {
+      "input_id": "H/ham_0-uuf100-0810.cnf-40-res",
+      "status": "verified",
+      "declared": 40,
+      "active": 40,
+      "hash": "7c6a27e6dabb99463f7aa29ee6b85af802105b7862c6109ed2b497c3c622ec1b"
+    },
+    {
+      "input_id": "H/ham_8-uuf100-0509.cnf-40-cc",
+      "status": "verified",
+      "declared": 40,
+      "active": 40,
+      "hash": "b326a02d7bccca5bba7b80ac764d6e0eddb8ed351462322d88f7633ef94bdab6"
+    },
+    {
+      "input_id": "H/ham_2-uf100-0396.cnf-46-res",
+      "status": "verified",
+      "declared": 46,
+      "active": 46,
+      "hash": "7ac8cec6edb037d4738655b28d23d5e7da4f11ff364f2fff80384ba2531642c3"
+    },
+    {
+      "input_id": "H/ham_2-uf100-0601.cnf-46-res",
+      "status": "verified",
+      "declared": 46,
+      "active": 46,
+      "hash": "f2534812b89415d072374527d37c964ed5a0226c58fe2b7879592063b1db6a0e"
+    },
+    {
+      "input_id": "H/ham_tsp_prob-ts225_Ncity-5_enc-unary",
+      "status": "verified",
+      "declared": 25,
+      "active": 25,
+      "hash": "e8053f509a14e846e9d007e3c5faaa6ee057289538dc63f7e30754693e92d190"
+    },
+    {
+      "input_id": "H/ham_tsp_prob-lin105_Ncity-7_enc-unary",
+      "status": "verified",
+      "declared": 49,
+      "active": 49,
+      "hash": "0305183ef4e0048d05a071d104982bb2efac01a635c89ea8875ea59bcf40b6fa"
+    },
+    {
+      "input_id": "H/ham_tsp_prob-d198_Ncity-8_enc-unary",
+      "status": "verified",
+      "declared": 64,
+      "active": 64,
+      "hash": "25558e871d2c0b9f304dcc64055851dbb935ed189b6c224319ba65ae679e497b"
+    },
+    {
+      "input_id": "H/ham_tsp_prob-fl417_Ncity-16_enc-stdbinary",
+      "status": "verified",
+      "declared": 64,
+      "active": 64,
+      "hash": "5f18cece03a8370ea826f963d7e0075fe8f5d3bfab8bef76c0d31decaced3570"
+    },
+    {
+      "input_id": "H/ham_gnp-k_4_n-40_rinst-07",
+      "status": "verified",
+      "declared": 40,
+      "active": 40,
+      "hash": "d84b2eace7893f244ad18ec772bfbc716736a8d2563c38f3d24a1ecf4d6460c5"
+    },
+    {
+      "input_id": "H/ham_gnp-k_5_n-60_rinst-19",
+      "status": "verified",
+      "declared": 60,
+      "active": 60,
+      "hash": "2086b1e366e552f90c3473c57575062f026b90b2b19a969400c9535389b30cfa"
+    },
+    {
+      "input_id": "H/ham_dsjc1000.1,n-36,rinst-4",
+      "status": "verified",
+      "declared": 72,
+      "active": 72,
+      "hash": "b65c44da32a22b151051da0144430102bb9a0d9a5cea3f54aadf7862db71b1b8"
+    },
+    {
+      "input_id": "H/ham_queen13_13,n-28,rinst-0",
+      "status": "verified",
+      "declared": 112,
+      "active": 112,
+      "hash": "89d2c4dda1abf76375e31e800bae7ac4568d91f3da7775f533a869d728b02b66"
+    },
+    {
+      "input_id": "H/ham_will199gpia,n-60,rinst-8",
+      "status": "verified",
+      "declared": 120,
+      "active": 120,
+      "hash": "271daa119ef6b08192bbf9f42765e7581dd505b0cecf002855e718020aa66925"
+    },
+    {
+      "input_id": "S/test_QAOA_100_transpile",
+      "status": "verified",
+      "declared": 100,
+      "active": 100,
+      "hash": "6006b3198ac0c4fafd333f3cc8f373cee150118d03d3f69b4efd5f84dc238976"
+    },
+    {
+      "input_id": "H/ham_4-uf100-0246.cnf-70-res",
+      "status": "verified",
+      "declared": 70,
+      "active": 70,
+      "hash": "53149a2c4804f79d9e4560ff37d5f9bd605a0de2e277c5323c5fd23fc80369ec"
+    },
+    {
+      "input_id": "H/ham_4-flat100-7.cnf-90-cc",
+      "status": "verified",
+      "declared": 90,
+      "active": 90,
+      "hash": "b352cc0eae10619b6770e8137969b68f7ce6dd2ec62932ab5a291003bef1e7c3"
+    },
+    {
+      "input_id": "H/ham_tsp_prob-pr76_Ncity-10_enc-unary",
+      "status": "verified",
+      "declared": 100,
+      "active": 100,
+      "hash": "e32d7bfa2bc4a7e2714e7635c58755f90921b73d9c5a52aeb7fe838b9d16ac8b"
+    },
+    {
+      "input_id": "H/ham_gnp-k_5_n-90_rinst-02",
+      "status": "verified",
+      "declared": 90,
+      "active": 90,
+      "hash": "9290c8285014248a4712eb10e4155f9564d9ffdedb2d047d64e73912fde0684c"
+    },
+    {
+      "input_id": "H/ham_reg-4_n-90_rinst-07",
+      "status": "verified",
+      "declared": 90,
+      "active": 90,
+      "hash": "528dcb32f3c8aba647cacfc1e3edef37392e16aa415dc661db9a3156fe83c5f9"
+    },
+    {
+      "input_id": "Q/medium/bwt_n21",
+      "status": "verified",
+      "declared": 21,
+      "active": 21,
+      "hash": "566156b53f6014775a6cbd076addb0c3807af9867e128e3c842461bb3fc2a59f"
+    },
+    {
+      "input_id": "H/ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-4_U-40_enc-gray_d-8",
+      "status": "verified",
+      "declared": 12,
+      "active": 12,
+      "hash": "8f10e9be66b428b6465e173ffc025516f3c6a959e13dba4ab24dd9b2ad7995dc"
+    },
+    {
+      "input_id": "Q/large/bwt_n37",
+      "status": "verified",
+      "declared": 37,
+      "active": 37,
+      "hash": "d8e1a274d29f0c1fdf85873d65e4f0b9f0193c11bfe4c91fac9dd109f6db6502"
+    },
+    {
+      "input_id": "H/ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-14_U-10_enc-stdbinary_d-4",
+      "status": "verified",
+      "declared": 28,
+      "active": 28,
+      "hash": "9bef8dda929144d9f61396fd2e1c523d1943cfaf000dd01f53c91657bc16e640"
+    },
+    {
+      "input_id": "H/ham_bh_graph-2D-triag-nonpbc-qubitnodes_Lx-3_Ly-5_U-30_enc-gray_d-4",
+      "status": "verified",
+      "declared": 28,
+      "active": 28,
+      "hash": "a7f1447ec7f8206be7e7bea9ccd0395bd869f73298a3dcc2082742ed2765cb60"
+    },
+    {
+      "input_id": "H/ham_bh_graph-3D-grid-nonpbc-qubitnodes_Lx-2_Ly-2_Lz-2_U-20_enc-unary_d-4",
+      "status": "verified",
+      "declared": 32,
+      "active": 32,
+      "hash": "74a59ccd30092c9de964e945bb9bba009e8b76fefff61ac3bcc479ecfe1ddc51"
+    },
+    {
+      "input_id": "H/ham_bh_graph-1D-grid-nonpbc-qubitnodes_Lx-12_U-40_enc-unary_d-4",
+      "status": "verified",
+      "declared": 48,
+      "active": 48,
+      "hash": "735444c687c94ac8765a7fb1f307e736b4367869a17a5a9b5b34555e184f8ce6"
+    },
+    {
+      "input_id": "H/ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-24_U-20_enc-stdbinary_d-4",
+      "status": "verified",
+      "declared": 48,
+      "active": 48,
+      "hash": "fc1e2406808d97d2b4a3e3e5cbd0ed23d64ee29b853480d7fff04844ec4779b8"
+    },
+    {
+      "input_id": "H/ham_bh_graph-2D-triag-pbc-qubitnodes_Lx-5_Ly-5_U-30_enc-unary_d-4",
+      "status": "verified",
+      "declared": 60,
+      "active": 60,
+      "hash": "91892778552d0482af000a3aa3fadffc235f0bd33ee6ea3272023cfc3f51806a"
+    },
+    {
+      "input_id": "H/ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-10_U-30_enc-unary_d-8",
+      "status": "verified",
+      "declared": 80,
+      "active": 80,
+      "hash": "8051fa92b5b19ff50da4bff9deaa31123b7a70d0b9328e32be5c459db88d7c28"
+    },
+    {
+      "input_id": "H/ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-46_U-2_enc-gray_d-4",
+      "status": "verified",
+      "declared": 92,
+      "active": 92,
+      "hash": "0d167c7fbabe67df3a7c8f7ce0f72abf78b9cb6331f7ad529966f27e7dfbe721"
+    },
+    {
+      "input_id": "H/ham_bh_graph-2D-grid-nonpbc-qubitnodes_Lx-7_Ly-7_U-70_enc-gray_d-4",
+      "status": "verified",
+      "declared": 98,
+      "active": 98,
+      "hash": "832d49d5deaf7e06ab08c0050edd89bd4701cbd696df72e00e508f2965b7e22c"
+    },
+    {
+      "input_id": "H/ham_bh_graph-2D-triag-pbc-qubitnodes_Lx-10_Ly-10_U-30_enc-stdbinary_d-4",
+      "status": "verified",
+      "declared": 100,
+      "active": 100,
+      "hash": "11f638272a0d71167d7bbfea5b06745b464debe0daa6a92a7449299777b8aa17"
+    },
+    {
+      "input_id": "H/ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-60_U-10_enc-stdbinary_d-4",
+      "status": "verified",
+      "declared": 120,
+      "active": 120,
+      "hash": "f38a472f51cf339ee7afcb8c747204dd7c786a0226a172ab3ae9fda52646a3f7"
+    },
+    {
+      "input_id": "H/ham_bh_graph-2D-triag-pbc-qubitnodes_Lx-3_Ly-22_U-70_enc-unary_d-4",
+      "status": "verified",
+      "declared": 132,
+      "active": 132,
+      "hash": "dff9597648be2824e65eb3cf296c538cc4032cf7836aaa8c776fbae44dc98ed2"
+    },
+    {
+      "input_id": "H/ham_fh-graph-1D-grid-pbc-qubitnodes_Lx-50_U-2_enc-jw",
+      "status": "verified",
+      "declared": 100,
+      "active": 100,
+      "hash": "4aaccb8f72798baec0485502c00aa174d50fb61ed86d33fe146e265a2c73ca67"
+    },
+    {
+      "input_id": "H/ham_graph-2D-grid-nonpbc-qubitnodes_Lx-5_Ly-15_h-3",
+      "status": "verified",
+      "declared": 75,
+      "active": 75,
+      "hash": "2eb04eaa9799d2e5030e8a6922b3a139962a677a735e8d74fedecaf7f56f00ea"
+    },
+    {
+      "input_id": "H/ham_graph-2D-triag-pbc-qubitnodes_Lx-13_Ly-13_h-0.1",
+      "status": "verified",
+      "declared": 91,
+      "active": 91,
+      "hash": "ff2b9d568dea8f4791d21de56e1d09c579c1ef94139bc2523e7d90f81d633df4"
+    },
+    {
+      "input_id": "Q/medium/gcm_h6",
+      "status": "verified",
+      "declared": 13,
+      "active": 13,
+      "hash": "ee2da541566fd94073556b3045852b4c51c150bef2f9e84ccb0667938a659b8a"
+    },
+    {
+      "input_id": "Q/small/vqe_uccsd_n8",
+      "status": "verified",
+      "declared": 8,
+      "active": 8,
+      "hash": "4e94bba75e2e8023026ac3f654a1917ec67ac3775f57b8bff72a3be903edb661"
+    },
+    {
+      "input_id": "H/ham_ham_JW-10",
+      "status": "verified",
+      "declared": 10,
+      "active": 10,
+      "hash": "b2068bd6a1fff3c6ee069fa1881d922e59940352aeca5cf7b8973a3e8b0f7b5c"
+    },
+    {
+      "input_id": "H/ham_ham_JW-18",
+      "status": "verified",
+      "declared": 18,
+      "active": 18,
+      "hash": "ba1247914a3dc0eca77313755ee4562256b1d08a1d3fe50515fb5c83ea11a056"
+    },
+    {
+      "input_id": "H/ham_ham_JW-8",
+      "status": "verified",
+      "declared": 8,
+      "active": 8,
+      "hash": "020edd63c2dabb72d386a44e16c1318329e87dfb3ceb0b6fc5bae46963ea2442"
+    },
+    {
+      "input_id": "H/ham_ham_parity10",
+      "status": "verified",
+      "declared": 10,
+      "active": 10,
+      "hash": "4e4ace3e35a4d99116027ee4a222964844db50055c26ce74c1e20a3e4f21f38a"
+    },
+    {
+      "input_id": "H/ham_ham_BK12",
+      "status": "verified",
+      "declared": 12,
+      "active": 12,
+      "hash": "ac042a9edbbceb9bf4ef81250e841c6379e257e87bf6a628cd98c0d9146ac271"
+    },
+    {
+      "input_id": "H/ham_ham_JW14",
+      "status": "verified",
+      "declared": 14,
+      "active": 14,
+      "hash": "834f72788271dead132bea314f1ba703e2edf649e43cd0f8545dc57d353b830f"
+    },
+    {
+      "input_id": "H/ham_ham_parity-14",
+      "status": "verified",
+      "declared": 14,
+      "active": 14,
+      "hash": "ba47c4121e7bf4e3f3624b75f3692c1594cc979015b8a361b650a9f80cb67b25"
+    },
+    {
+      "input_id": "H/ham_ham_JW-22",
+      "status": "verified",
+      "declared": 22,
+      "active": 22,
+      "hash": "6d89c50c6a4ec11273dfc612a6dda10933df253a588bfddc9c113784e90a53a3"
+    },
+    {
+      "input_id": "H/ham_ham_BK-14",
+      "status": "verified",
+      "declared": 14,
+      "active": 14,
+      "hash": "bbe4118f8018993bb3856ffc8296fe3ab3cd3387be0c73350fc2a67de643a45d"
+    },
+    {
+      "input_id": "H/ham_ham_JW-14",
+      "status": "verified",
+      "declared": 14,
+      "active": 14,
+      "hash": "8da450758bd98f04768e9fbec2bad4a100342c06aeaa6701fdc960113fcf4aa2"
+    },
+    {
+      "input_id": "H/ham_ham_JW24",
+      "status": "verified",
+      "declared": 24,
+      "active": 24,
+      "hash": "a984584c3da9e3e963deca08d66b326b74de8766f122a14628b87e93f3238618"
+    },
+    {
+      "input_id": "H/ham_ham_BK22",
+      "status": "verified",
+      "declared": 22,
+      "active": 22,
+      "hash": "6d56d4c5d77a191266df945ed37db3e8bcd4e84f3a0a72bdcc2582ae50a2022b"
+    },
+    {
+      "input_id": "H/ham_ham_JW12",
+      "status": "verified",
+      "declared": 12,
+      "active": 12,
+      "hash": "3d456316324fad82570d6a5dfc811e3aae29aea9cc172d8221da8a076f29caba"
+    },
+    {
+      "input_id": "H/ham_ham_parity12",
+      "status": "verified",
+      "declared": 12,
+      "active": 12,
+      "hash": "faa5506bcb02658ab5b1a26b0ec09294f1a277977a41d37a1635d97bf9147680"
+    },
+    {
+      "input_id": "H/ham_enc_gray_dvalues_4-4-4-4-4-4-4",
+      "status": "verified",
+      "declared": 14,
+      "active": 14,
+      "hash": "9b447eb8ae1cc156e6d81806c7075dc30d80cbeafdff0a7ace6e19672d40642b"
+    },
+    {
+      "input_id": "H/ham_enc_unary_dvalues_4-4-4",
+      "status": "verified",
+      "declared": 12,
+      "active": 12,
+      "hash": "e03d3c047644ef5debbafc49a7cd504de2278cf8ff3fc9ce1561328352568bc6"
+    },
+    {
+      "input_id": "H/ham_enc_gray_dvalues_8-8-8",
+      "status": "verified",
+      "declared": 9,
+      "active": 9,
+      "hash": "bb840e43002f76cfd20d7f395b276f27a49b550d78d823e4bc3afc5ca2564934"
+    },
+    {
+      "input_id": "Q/large/vqe_uccsd_n28",
+      "status": "verified",
+      "declared": 28,
+      "active": 28,
+      "hash": "b706ce9bfb0d6aa727e90ba3ef807d3a1842a8434f127bc343de772ad42d42b8"
+    },
+    {
+      "input_id": "Q/large/32",
+      "status": "verified",
+      "declared": 32,
+      "active": 32,
+      "hash": "55c36c6c91f08022988e184c273682c639fca8afbc962187641fc17e48a9b9f7"
+    },
+    {
+      "input_id": "S/test_clifford_100_transpile",
+      "status": "verified",
+      "declared": 100,
+      "active": 100,
+      "hash": "f4a32bc8a683487c9b6fb9038f3f4ee63a2dacef9904e35a94340e6ebd306aa9"
+    },
+    {
+      "input_id": "Q/large/100",
+      "status": "verified",
+      "declared": 100,
+      "active": 100,
+      "hash": "fce271b52f0ac35291206e62e90c8ce77e8b7eaa19e3d7db051ef45fd12cc0c6"
+    },
+    {
+      "input_id": "S/test_QV_100_transpile",
+      "status": "verified",
+      "declared": 100,
+      "active": 100,
+      "hash": "42fa7f33cd3dea6b2c1fb39ac24903e3ea4f9864cceee9f6027e4045eada6f3c"
+    },
+    {
+      "input_id": "Q/small/qpe_n9",
+      "status": "verified",
+      "declared": 9,
+      "active": 9,
+      "hash": "9f284f1ac4fd34285f6dab4bcb41c1b8d432987fcb4fdd20ca2a2d7064422cdf"
+    },
+    {
+      "input_id": "Q/medium/bv_n14",
+      "status": "verified",
+      "declared": 14,
+      "active": 14,
+      "hash": "ef8a299a928a05295d87c8e33b354ffbb3dbf06dffbebb4e4736d704fcc036be"
+    },
+    {
+      "input_id": "Q/medium/cc_n12",
+      "status": "verified",
+      "declared": 12,
+      "active": 12,
+      "hash": "4033895eb2e51ea91ea4b956e0e640207789aa90dfc306079215ca9e0de63621"
+    },
+    {
+      "input_id": "Q/large/bv_n30",
+      "status": "verified",
+      "declared": 30,
+      "active": 30,
+      "hash": "3f6ad3627cbdeede7e96fd6aae86f2ffa0ce850eda0444b9a5673450e37a3c38"
+    },
+    {
+      "input_id": "H/ham_7-uf20-0384.cnf-8-res",
+      "status": "verified",
+      "declared": 8,
+      "active": 8,
+      "hash": "1d53e44145808f396c9ef4b7442025fe5756e38a64a4f66b48521bd6819b5dbf"
+    },
+    {
+      "input_id": "H/ham_mu_x_prime_enc_stdbinary_dvalues_8-8-8-8-8-8-8-8-8-4-4-4-4-4-4",
+      "status": "verified",
+      "declared": 11,
+      "active": 11,
+      "hash": "ffaa4eb7a742427af91fd874c5abfd6bbb121d1dbed46d0091a6e90f40ba998c"
+    },
+    {
+      "input_id": "Q/medium/knn_n25",
+      "status": "verified",
+      "declared": 25,
+      "active": 25,
+      "hash": "ae1ee1668c542475f04bae88aa19bb79400e38324b8021f217d769f92fb8bab1"
+    },
+    {
+      "input_id": "Q/large/knn_n41",
+      "status": "verified",
+      "declared": 41,
+      "active": 41,
+      "hash": "f32bd1aa77651530007d997e5d705492bfbab4b87a53adffe7b3b01b5e0e4653"
+    },
+    {
+      "input_id": "H/ham_ham_JW10",
+      "status": "verified",
+      "declared": 10,
+      "active": 10,
+      "hash": "d87e03d40a0b65a06b7c7f3bde8b07b0397019b3ae337086cbd4b243ee25b724"
+    },
+    {
+      "input_id": "H/ham_tsp_prob-st70_Ncity-10_enc-unary",
+      "status": "verified",
+      "declared": 100,
+      "active": 100,
+      "hash": "6a108989ca362efd09fca465b2a2d12afaccf8e1aa7cf25b8982711b7b14e885"
+    },
+    {
+      "input_id": "H/ham_tsp_prob-kroD100_Ncity-16_enc-stdbinary",
+      "status": "verified",
+      "declared": 64,
+      "active": 64,
+      "hash": "2a935097370f63dd8cba6ee98fe8a89d47ef6a720562b8b4fa5bfd664f54e733"
+    }
+  ]
+}

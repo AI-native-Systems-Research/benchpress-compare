@@ -1,0 +1,39 @@
+# Copy to an explicit site configuration and replace the queue.
+# No queue, reservation, project, or filesystem location is implied by this file.
+[lsf]
+queue = "REPLACE_WITH_SITE_QUEUE"
+# project = "your-project"
+# reservation = "your-reservation"
+# host_select = "type==X86_64"
+
+# Controller dispatch budgets include pending and suspended jobs.
+max_jobs = 16
+max_cpus = 16
+max_memory_gb = 128
+poll_seconds = 10
+visibility_grace_seconds = 300
+job_wall_seconds = 86400
+
+# Confirm both -M and rusage[mem=...] behavior against the site's LSF policy.
+# Supported configured units are KB, MB and GB.
+memory_unit = "MB"
+# Override separately on sites where hard limits and reservations differ.
+# memory_limit_unit = "KB"
+# memory_reservation_unit = "MB"
+memory_per_slot = false
+
+controller_cpus = 1
+controller_memory_gb = 4
+# Set an execution-platform environment when the launch host differs from workers.
+# It must already contain the pinned benchpress-compare coordinator package.
+# controller_python = "/shared/coordinator/.venv/bin/python"
+build_cpus = 4
+build_memory_gb = 16
+
+bsub = "bsub"
+bjobs = "bjobs"
+bhist = "bhist"
+bkill = "bkill"
+# Set false only when the site's requested jobid/stat/job_name text output is
+# verified. Query command failure is not treated as an empty job listing.
+machine_readable = true
