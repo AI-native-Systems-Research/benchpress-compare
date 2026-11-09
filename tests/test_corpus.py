@@ -11,7 +11,16 @@ def test_reviewed_inventory_and_source_totals():
     assert len(data["candidates"]) == 149
     main = [r for r in data["candidates"] if r["category"] == "main"]
     assert Counter(r["input_id"][0] for r in main) == {"Q": 44, "F": 32, "S": 6, "H": 56}
-    assert Counter(r["family"] for r in main) == {"F1": 6, "F2": 32, "F3": 27, "F4": 6, "F5": 25, "F6": 18, "F7": 20, "F8": 4}
+    assert Counter(r["family"] for r in main) == {
+        "F1": 6,
+        "F2": 32,
+        "F3": 27,
+        "F4": 6,
+        "F5": 25,
+        "F6": 18,
+        "F7": 20,
+        "F8": 4,
+    }
     assert sum("structural_canonical" in r for r in data["candidates"]) == 5
     assert len(data["coverage"]) == 8
     assert sum(len(r["aliases"]) for r in main) == 2
@@ -30,7 +39,9 @@ def test_all_pinned_assets_and_hamlib_identities_are_explicit():
     assert rows["Q/large/knn_129"]["source"]["path"].endswith("knn_n129/knn_129.qasm")
 
 
-@pytest.mark.parametrize("width,band", [(8, "S"), (24, "S"), (25, "M"), (64, "M"), (65, "L"), (133, "L")])
+@pytest.mark.parametrize(
+    "width,band", [(8, "S"), (24, "S"), (25, "M"), (64, "M"), (65, "L"), (133, "L")]
+)
 def test_bands(width, band):
     assert width_band(width) == band
 
@@ -75,8 +86,14 @@ def test_pauli_order_coefficients_and_synthesis_are_preserved():
     from benchpress_compare.corpus.ir import export_circuit, import_circuit
 
     q = qiskit.QuantumCircuit(2)
-    q.append(PauliEvolutionGate(SparsePauliOp.from_list([("ZZ", 0.7), ("XI", -0.31)]), time=1,
-                                synthesis=LieTrotter(reps=1, preserve_order=True)), [0, 1])
+    q.append(
+        PauliEvolutionGate(
+            SparsePauliOp.from_list([("ZZ", 0.7), ("XI", -0.31)]),
+            time=1,
+            synthesis=LieTrotter(reps=1, preserve_order=True),
+        ),
+        [0, 1],
+    )
     encoded = export_circuit(q)
     assert encoded["operations"][0]["groups"][0] == [["ZZ", 0.7, 0.0], ["XI", -0.31, 0.0]]
     assert export_circuit(import_circuit(encoded)) == encoded
@@ -86,6 +103,7 @@ def test_unbound_and_loop_fixtures_are_rejected():
     qiskit = pytest.importorskip("qiskit")
     from qiskit.circuit import Parameter
     from benchpress_compare.corpus.ir import export_circuit, UnsupportedCircuit
+
     q = qiskit.QuantumCircuit(1)
     q.rx(Parameter("theta"), 0)
     with pytest.raises(UnsupportedCircuit, match="binding"):

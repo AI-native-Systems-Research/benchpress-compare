@@ -54,7 +54,9 @@ def verify_corpus(root: str | Path, catalogue: dict | None = None) -> dict:
     if not root.is_dir():
         raise ValueError(f"Corpus directory does not exist: {root}")
     if (root / ".git").exists():
-        revision = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+        revision = subprocess.check_output(
+            ["git", "-C", str(root), "rev-parse", "HEAD"], text=True
+        ).strip()
         if revision != CORPUS_REVISION:
             raise ValueError(f"Corpus revision {revision} differs from {CORPUS_REVISION}")
     assets = {}
@@ -72,8 +74,13 @@ def verify_corpus(root: str | Path, catalogue: dict | None = None) -> dict:
         if digest != source["sha256"]:
             raise ValueError(f"Pinned corpus hash mismatch: {relative}")
         assets[relative] = digest
-    return {"schema_version": 1, "revision": CORPUS_REVISION, "assets": assets,
-            "catalogue_hash": canonical_hash(catalogue), "candidate_count": 149}
+    return {
+        "schema_version": 1,
+        "revision": CORPUS_REVISION,
+        "assets": assets,
+        "catalogue_hash": canonical_hash(catalogue),
+        "candidate_count": 149,
+    }
 
 
 def width_band(width: int) -> str:
@@ -103,12 +110,18 @@ def _load_source(candidate, root, master_seed):
         if len(matches) != 1 or matches[0]["ham_instance"] != source["ham_instance"]:
             raise ValueError("HamLib record does not have a unique frozen identity")
         record = matches[0]
-        terms, coefficients = record["ham_hamlib_hamiltonian_terms"], record["ham_hamlib_hamiltonian_coefficients"]
+        terms, coefficients = (
+            record["ham_hamlib_hamiltonian_terms"],
+            record["ham_hamlib_hamiltonian_coefficients"],
+        )
         if len(terms) != len(coefficients) or len(terms) != record["ham_terms"]:
             raise ValueError("HamLib term count mismatch")
         operator = SparsePauliOp.from_list(list(zip(terms, coefficients, strict=True)))
         circuit = QuantumCircuit(record["ham_qubits"])
-        circuit.append(PauliEvolutionGate(operator, time=1, synthesis=LieTrotter(reps=1, preserve_order=True)), circuit.qubits)
+        circuit.append(
+            PauliEvolutionGate(operator, time=1, synthesis=LieTrotter(reps=1, preserve_order=True)),
+            circuit.qubits,
+        )
     elif source["kind"] == "generator":
         method = source["method"]
         if method == "test_QV_100_transpile":
@@ -119,9 +132,12 @@ def _load_source(candidate, root, master_seed):
             for index, parameter in enumerate(circuit.parameters):
                 # A dedicated generation namespace, independent of preflight,
                 # pilot and comparison repetitions. Values are strictly nonzero.
-                token = json.dumps(["fixture-generation-v1", master_seed, candidate["input_id"], index], separators=(",", ":")).encode()
+                token = json.dumps(
+                    ["fixture-generation-v1", master_seed, candidate["input_id"], index],
+                    separators=(",", ":"),
+                ).encode()
                 integer = int.from_bytes(hashlib.sha256(token).digest()[:8], "big")
-                value = math.pi * (integer + 1) / (2 ** 64 + 1)
+                value = math.pi * (integer + 1) / (2**64 + 1)
                 mapping[parameter] = value
                 bindings[parameter.name] = value
             circuit = circuit.assign_parameters(mapping)
@@ -148,8 +164,9 @@ def _load_source(candidate, root, master_seed):
     return circuit, bindings
 
 
-def freeze_fixture(candidate: dict, corpus_root: str | Path, destination: str | Path,
-                   master_seed: int = 20261109) -> dict:
+def freeze_fixture(
+    candidate: dict, corpus_root: str | Path, destination: str | Path, master_seed: int = 20261109
+) -> dict:
     root = Path(corpus_root).resolve()
     circuit, bindings = _load_source(candidate, root, master_seed)
     if circuit.num_qubits != candidate["declared_width"] or circuit.num_qubits > 133:
@@ -169,13 +186,24 @@ def freeze_fixture(candidate: dict, corpus_root: str | Path, destination: str | 
             raise ValueError("Claimed QASM alias is not newline-normalized identical")
         aliases.append(alias["input_id"])
     fixture = {
-        "schema_version": 1, "input_id": candidate["input_id"], "aliases": aliases,
-        "source": candidate["source"], "corpus_revision": CORPUS_REVISION,
-        "fixture_hash": canonical_hash(logical), "logical": logical,
-        "declared_width": circuit.num_qubits, "active_width": active_width,
-        "family": candidate["family"], "recipe": candidate["recipe"],
-        "band": width_band(active_width), "parameter_bindings": bindings,
-        "semantics": {"input_state": "arbitrary logical state", "ancillas": "zero initialized", "classical_outputs": "all declared classical bits"},
+        "schema_version": 1,
+        "input_id": candidate["input_id"],
+        "aliases": aliases,
+        "source": candidate["source"],
+        "corpus_revision": CORPUS_REVISION,
+        "fixture_hash": canonical_hash(logical),
+        "logical": logical,
+        "declared_width": circuit.num_qubits,
+        "active_width": active_width,
+        "family": candidate["family"],
+        "recipe": candidate["recipe"],
+        "band": width_band(active_width),
+        "parameter_bindings": bindings,
+        "semantics": {
+            "input_state": "arbitrary logical state",
+            "ancillas": "zero initialized",
+            "classical_outputs": "all declared classical bits",
+        },
     }
     atomic_write_json(Path(destination), fixture)
     return fixture

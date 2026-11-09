@@ -7,6 +7,7 @@ from benchpress_compare.tasks import main
 
 def test_interrupted_build_retains_evidence_and_recovers_final_path(tmp_path, monkeypatch):
     from benchpress_compare import builds
+
     destination = tmp_path / "build"
     destination.mkdir()
     (destination / "partial.log").write_text("interrupted cargo")
@@ -22,10 +23,18 @@ def test_interrupted_build_retains_evidence_and_recovers_final_path(tmp_path, mo
         return {"schema_version": 1, "manifest_path": str(target / "manifest.json")}
 
     monkeypatch.setattr(builds, "build_release", build)
-    spec = {"task": "build", "destination": str(destination), "snapshot": str(tmp_path / "source"),
-            "python": sys.executable, "dependency_lock": {}, "harness_wheel": "harness.whl",
-            "rustup_home": str(rustup_home), "attempt_id": "second", "output_dir": str(tmp_path / "attempt"),
-            "runtime_profile": {"wall_seconds": 10}}
+    spec = {
+        "task": "build",
+        "destination": str(destination),
+        "snapshot": str(tmp_path / "source"),
+        "python": sys.executable,
+        "dependency_lock": {},
+        "harness_wheel": "harness.whl",
+        "rustup_home": str(rustup_home),
+        "attempt_id": "second",
+        "output_dir": str(tmp_path / "attempt"),
+        "runtime_profile": {"wall_seconds": 10},
+    }
     path = tmp_path / "spec.json"
     atomic_write_json(path, spec)
     assert main([str(path)]) == 0
@@ -35,11 +44,17 @@ def test_interrupted_build_retains_evidence_and_recovers_final_path(tmp_path, mo
 
 def test_busy_shared_build_waits_without_mutating_owner(tmp_path, monkeypatch):
     from benchpress_compare.store import Lease
+
     destination = tmp_path / "build"
     destination.mkdir()
     (destination / "owner.log").write_text("still running")
-    spec = {"task": "build", "destination": str(destination), "attempt_id": "second",
-            "output_dir": str(tmp_path / "attempt"), "runtime_profile": {"wall_seconds": .01}}
+    spec = {
+        "task": "build",
+        "destination": str(destination),
+        "attempt_id": "second",
+        "output_dir": str(tmp_path / "attempt"),
+        "runtime_profile": {"wall_seconds": 0.01},
+    }
     path = tmp_path / "spec.json"
     atomic_write_json(path, spec)
     with Lease(destination.with_suffix(".lease")):

@@ -5,7 +5,14 @@ import pytest
 
 from benchpress_compare.errors import IntegrityError
 from benchpress_compare.identity import atomic_write_json
-from benchpress_compare.store import Lease, LeaseBusy, LeaseLost, Store, publish_bundle, verify_bundle
+from benchpress_compare.store import (
+    Lease,
+    LeaseBusy,
+    LeaseLost,
+    Store,
+    publish_bundle,
+    verify_bundle,
+)
 
 
 def test_publication_verifies_every_artifact_and_cannot_overwrite(tmp_path):
@@ -33,7 +40,12 @@ def test_incomplete_bundle_is_never_reusable(tmp_path):
 def test_simultaneous_publication_is_idempotent(tmp_path):
     path = tmp_path / "bundle"
     with ThreadPoolExecutor(max_workers=4) as pool:
-        futures = [pool.submit(publish_bundle, path, {"schema_version": 1, "key": "a"}, {"data": b"payload"}) for _ in range(4)]
+        futures = [
+            pool.submit(
+                publish_bundle, path, {"schema_version": 1, "key": "a"}, {"data": b"payload"}
+            )
+            for _ in range(4)
+        ]
         assert all(future.result()["record"]["key"] == "a" for future in futures)
     assert verify_bundle(path)
 
@@ -71,7 +83,9 @@ def test_store_only_caches_verified_baseline_and_owns_artifacts(tmp_path):
     with pytest.raises(ValueError, match="baseline"):
         store.publish("baseline/observations", "dead", {**record, "arm": "evolve"})
     with pytest.raises(ValueError, match="verified"):
-        store.publish("baseline/observations", "dead", {**record, "validation_status": "unsupported"})
+        store.publish(
+            "baseline/observations", "dead", {**record, "validation_status": "unsupported"}
+        )
     with pytest.raises(ValueError):
         store.path("evolve/observations", "abcd")
     with pytest.raises(ValueError):

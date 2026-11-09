@@ -15,10 +15,21 @@ def test_streams_disjoint_reproducible_and_prefix_stable():
 
 
 def test_generation_identity_is_source_qualified_recipe():
-    assert derive_seeds("Q/large/qft@1", "generation", 3) != derive_seeds("Q/large/qft@2", "generation", 3)
+    assert derive_seeds("Q/large/qft@1", "generation", 3) != derive_seeds(
+        "Q/large/qft@2", "generation", 3
+    )
 
 
-@pytest.mark.parametrize("args", [("", "comparison", 1), ("case", "unknown", 1), ("case", "comparison", -1), ("case", "comparison", True), ("case", "comparison", 1 << 30)])
+@pytest.mark.parametrize(
+    "args",
+    [
+        ("", "comparison", 1),
+        ("case", "unknown", 1),
+        ("case", "comparison", -1),
+        ("case", "comparison", True),
+        ("case", "comparison", 1 << 30),
+    ],
+)
 def test_invalid_streams(args):
     with pytest.raises(ValueError):
         derive_seeds(*args)

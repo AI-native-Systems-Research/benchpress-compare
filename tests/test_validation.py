@@ -2,7 +2,12 @@ from copy import deepcopy
 
 import pytest
 
-from benchpress_compare.validation import routing_replay, layout_validation, target_legality, validate_semantics
+from benchpress_compare.validation import (
+    routing_replay,
+    layout_validation,
+    target_legality,
+    validate_semantics,
+)
 from benchpress_compare.targets import synthetic_target
 
 
@@ -25,7 +30,9 @@ def test_routing_replay_distinguishes_original_swaps():
 
 def test_routing_replay_preserves_measurement_reset_and_classical_dependencies():
     logical = circuit(2, [op("measure", [0], [0]), op("reset", [0]), op("cx", [0, 1])], 1)
-    routed = circuit(2, [op("swap", [0, 1]), op("measure", [1], [0]), op("reset", [1]), op("cx", [1, 0])], 1)
+    routed = circuit(
+        2, [op("swap", [0, 1]), op("measure", [1], [0]), op("reset", [1]), op("cx", [1, 0])], 1
+    )
     assert routing_replay(logical, routed, [0, 1], [1, 0])["status"] == "verified"
     routed["operations"][1]["cargs"] = []
     assert routing_replay(logical, routed, [0, 1], [1, 0])["status"] == "mismatch"
@@ -36,12 +43,19 @@ def test_branch_routing_requires_reconciled_permutations():
     branch = op("if_else", [0, 1], [0], condition={"bits": [0], "value": 1}, blocks=[block])
     logical = circuit(2, [branch], 1)
     routed = deepcopy(logical)
-    routed["operations"][0]["blocks"][0]["operations"] = [op("swap", [0, 1]), op("cx", [1, 0]), op("swap", [0, 1])]
+    routed["operations"][0]["blocks"][0]["operations"] = [
+        op("swap", [0, 1]),
+        op("cx", [1, 0]),
+        op("swap", [0, 1]),
+    ]
     result = routing_replay(logical, routed, [0, 1], [0, 1])
     assert result["status"] == "verified"
     assert result["inserted_swaps"] == 2
     routed["operations"][0]["blocks"][0]["operations"].pop()
-    assert routing_replay(logical, routed, [0, 1], [0, 1])["reason"] == "branch_exit_permutations_differ"
+    assert (
+        routing_replay(logical, routed, [0, 1], [0, 1])["reason"]
+        == "branch_exit_permutations_differ"
+    )
 
 
 def test_illegal_native_edge_and_invalid_layout():
@@ -54,14 +68,18 @@ def test_illegal_native_edge_and_invalid_layout():
 def test_arbitrary_input_semantics_detects_change_hidden_on_zero_state():
     qiskit = pytest.importorskip("qiskit")
     from benchpress_compare.corpus.ir import export_circuit
+
     a, b = qiskit.QuantumCircuit(1), qiskit.QuantumCircuit(1)
     b.z(0)
-    assert validate_semantics(export_circuit(a), export_circuit(b), [0], [0])["status"] == "mismatch"
+    assert (
+        validate_semantics(export_circuit(a), export_circuit(b), [0], [0])["status"] == "mismatch"
+    )
 
 
 def test_dynamic_instrument_detects_branch_state_corruption_and_reset():
     qiskit = pytest.importorskip("qiskit")
     from benchpress_compare.corpus.ir import export_circuit
+
     a = qiskit.QuantumCircuit(2, 1)
     a.measure(0, 0)
     with a.if_test((a.clbits[0], 1)):
@@ -80,17 +98,22 @@ def test_dynamic_instrument_detects_branch_state_corruption_and_reset():
 def test_overwritten_measurement_outcome_still_dephases_quantum_state():
     qiskit = pytest.importorskip("qiskit")
     from benchpress_compare.corpus.ir import export_circuit
+
     logical = qiskit.QuantumCircuit(2, 1)
     logical.measure(0, 0)
     logical.measure(1, 0)
     bad = qiskit.QuantumCircuit(2, 1)
     bad.measure(1, 0)
-    assert validate_semantics(export_circuit(logical), export_circuit(bad), [0, 1], [0, 1])["status"] == "mismatch"
+    assert (
+        validate_semantics(export_circuit(logical), export_circuit(bad), [0, 1], [0, 1])["status"]
+        == "mismatch"
+    )
 
 
 def test_large_circuits_cannot_masquerade_as_semantically_verified():
     qiskit = pytest.importorskip("qiskit")
     from benchpress_compare.corpus.ir import export_circuit
+
     q = qiskit.QuantumCircuit(9)
     encoded = export_circuit(q)
     evidence = validate_semantics(encoded, encoded, list(range(9)), list(range(9)))

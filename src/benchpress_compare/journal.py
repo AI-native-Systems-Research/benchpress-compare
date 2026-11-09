@@ -34,12 +34,18 @@ class Journal:
                 event = json.loads(line)
                 claimed = event["event_hash"]
                 payload = {key: value for key, value in event.items() if key != "event_hash"}
-                if event["schema_version"] != 1 or event["sequence"] != len(events) or event["previous"] != previous:
+                if (
+                    event["schema_version"] != 1
+                    or event["sequence"] != len(events)
+                    or event["previous"] != previous
+                ):
                     raise ValueError("event version, sequence, or predecessor mismatch")
                 if claimed != canonical_hash(payload):
                     raise ValueError("event hash mismatch")
             except (KeyError, TypeError, ValueError) as exc:
-                raise IntegrityError(f"Corrupt committed journal record {len(events)} in {self.path}: {exc}") from exc
+                raise IntegrityError(
+                    f"Corrupt committed journal record {len(events)} in {self.path}: {exc}"
+                ) from exc
             events.append(event)
             previous = claimed
             committed_bytes += len(line)
@@ -68,7 +74,12 @@ class Journal:
             with self.path.open("a+b") as stream:
                 stream.truncate(committed_bytes)
                 stream.seek(0, os.SEEK_END)
-                stream.write((json.dumps(event, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n").encode())
+                stream.write(
+                    (
+                        json.dumps(event, sort_keys=True, separators=(",", ":"), allow_nan=False)
+                        + "\n"
+                    ).encode()
+                )
                 stream.flush()
                 os.fsync(stream.fileno())
             fsync_directory(self.path.parent)
@@ -78,9 +89,12 @@ class Journal:
         ownership = self.lease.fenced() if self.lease else contextlib.nullcontext()
         with ownership:
             events = self.replay()
-            atomic_write_json(Path(path), {
-                "schema_version": 1,
-                "last_event": events[-1]["event_hash"] if events else None,
-                "event_count": len(events),
-                "state": state,
-            })
+            atomic_write_json(
+                Path(path),
+                {
+                    "schema_version": 1,
+                    "last_event": events[-1]["event_hash"] if events else None,
+                    "event_count": len(events),
+                    "state": state,
+                },
+            )

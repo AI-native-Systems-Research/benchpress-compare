@@ -36,15 +36,24 @@ def parse_jobs(output: str) -> list[dict]:
             job_id, state = row.get("jobid", row.get("job_id")), row.get("stat", row.get("status"))
             if job_id is None or state not in ACTIVE | TERMINAL | {"UNKWN"}:
                 raise ValueError("Missing or unknown scheduler identity/state")
-            normalized.append({"job_id": str(job_id), "scheduler_state": state,
-                               "name": row.get("job_name", row.get("jobname", ""))})
+            normalized.append(
+                {
+                    "job_id": str(job_id),
+                    "scheduler_state": state,
+                    "name": row.get("job_name", row.get("jobname", "")),
+                }
+            )
         return normalized
     rows = []
     for line in text.splitlines():
         fields = line.split(None, 2)
         if fields and fields[0].upper() in {"JOBID", "JOB_ID"}:
             continue
-        if len(fields) != 3 or not fields[0].isdigit() or fields[1] not in ACTIVE | TERMINAL | {"UNKWN"}:
+        if (
+            len(fields) != 3
+            or not fields[0].isdigit()
+            or fields[1] not in ACTIVE | TERMINAL | {"UNKWN"}
+        ):
             raise ValueError(f"Unrecognized scheduler row: {line!r}")
         rows.append({"job_id": fields[0], "scheduler_state": fields[1], "name": fields[2]})
     return rows
@@ -61,25 +70,51 @@ class LSFExecutor:
     def submit(self, command, attempt_dir, profile, *, name, token):
         attempt_dir = Path(attempt_dir).resolve()
         attempt_dir.mkdir(parents=True, exist_ok=True)
-        job = {"schema_version": 1, "executor": "lsf", "name": name, "token": token,
-               "status": "SUBMITTING", "submitted_at": time.time(),
-               "attempt_dir": str(attempt_dir), "runtime_profile": profile,
-               "site": asdict(self.site)}
+        job = {
+            "schema_version": 1,
+            "executor": "lsf",
+            "name": name,
+            "token": token,
+            "status": "SUBMITTING",
+            "submitted_at": time.time(),
+            "attempt_dir": str(attempt_dir),
+            "runtime_profile": profile,
+            "site": asdict(self.site),
+        }
         atomic_write_json(attempt_dir / "job.json", job)
-        units = {"KB": 1024, "MB": 1024 ** 2, "GB": 1024 ** 3}
+        units = {"KB": 1024, "MB": 1024**2, "GB": 1024**3}
         limit_unit = units[self.site.memory_limit_unit or self.site.memory_unit]
         reservation_unit = units[self.site.memory_reservation_unit or self.site.memory_unit]
         memory = math.ceil(profile["memory_bytes"] / limit_unit)
-        reservation = math.ceil(profile["memory_bytes"] / reservation_unit /
-                                (profile["native_threads"] if self.site.memory_per_slot else 1))
+        reservation = math.ceil(
+            profile["memory_bytes"]
+            / reservation_unit
+            / (profile["native_threads"] if self.site.memory_per_slot else 1)
+        )
         requirement = f"rusage[mem={reservation}] span[hosts=1]"
         if self.site.host_select:
             requirement = f"select[{self.site.host_select}] " + requirement
-        argv = [self.site.bsub, "-J", name, "-q", self.site.queue, "-n", str(profile["native_threads"]),
-                "-W", str(math.ceil(profile["wall_seconds"] / 60)), "-M", str(memory),
-                "-R", requirement,
-                "-oo", str(attempt_dir / "stdout.log"), "-eo", str(attempt_dir / "stderr.log"),
-                "-cwd", str(attempt_dir)]
+        argv = [
+            self.site.bsub,
+            "-J",
+            name,
+            "-q",
+            self.site.queue,
+            "-n",
+            str(profile["native_threads"]),
+            "-W",
+            str(math.ceil(profile["wall_seconds"] / 60)),
+            "-M",
+            str(memory),
+            "-R",
+            requirement,
+            "-oo",
+            str(attempt_dir / "stdout.log"),
+            "-eo",
+            str(attempt_dir / "stderr.log"),
+            "-cwd",
+            str(attempt_dir),
+        ]
         for flag, value in (("-P", self.site.project), ("-U", self.site.reservation)):
             if value:
                 argv.extend([flag, value])
@@ -126,8 +161,12 @@ class LSFExecutor:
             rows = self.query(name=job["name"], job_id=job.get("job_id"))
             if not rows:
                 rows = self.query(name=job["name"], job_id=job.get("job_id"), history=True)
-            matches = [row for row in rows if row["name"] == job["name"] and
-                       (not job.get("job_id") or row["job_id"] == job["job_id"])]
+            matches = [
+                row
+                for row in rows
+                if row["name"] == job["name"]
+                and (not job.get("job_id") or row["job_id"] == job["job_id"])
+            ]
             if len(matches) > 1:
                 raise ReconciliationError(f"Conflicting duplicate scheduler jobs: {job['name']}")
             if matches:
@@ -155,7 +194,9 @@ class LSFExecutor:
         if not job.get("job_id"):
             job = self.poll(job)
         if not job.get("job_id"):
-            raise ReconciliationError("Cannot cancel an unlocated submission; reconcile its token first")
+            raise ReconciliationError(
+                "Cannot cancel an unlocated submission; reconcile its token first"
+            )
         result = self._command([self.site.bkill, str(job["job_id"])])
         if result.returncode:
             raise ReconciliationError(f"Cancellation not confirmed: {result.stderr.strip()}")

@@ -5,14 +5,23 @@ from __future__ import annotations
 from collections import defaultdict
 
 
-def instrument_equivalence(logical, output, initial, final, *, max_logical_qubits=4, max_physical_qubits=6):
+def instrument_equivalence(
+    logical, output, initial, final, *, max_logical_qubits=4, max_physical_qubits=6
+):
     import numpy as np
     from qiskit.quantum_info import Operator
     from benchpress_compare.corpus.ir import import_circuit, IR_PROTOCOL
     from benchpress_compare.metrics import validate_circuit
     from . import layout_validation
 
-    scope = {"method": "exact_matrix_unit_instrument", "input_state": "arbitrary", "ancillas": "zero", "classical_outputs": "all", "max_logical_qubits": max_logical_qubits, "max_physical_qubits": max_physical_qubits}
+    scope = {
+        "method": "exact_matrix_unit_instrument",
+        "input_state": "arbitrary",
+        "ancillas": "zero",
+        "classical_outputs": "all",
+        "max_logical_qubits": max_logical_qubits,
+        "max_physical_qubits": max_physical_qubits,
+    }
     validation = layout_validation(initial, final, logical["num_qubits"], output["num_qubits"])
     if validation["status"] != "verified":
         return dict(validation, scope=scope)
@@ -22,9 +31,16 @@ def instrument_equivalence(logical, output, initial, final, *, max_logical_qubit
     # oracle, preserving every used ancilla and every input/output location.
     from copy import deepcopy
     from benchpress_compare.metrics import active_qubits
+
     active = sorted(active_qubits(output) | set(initial) | set(final))
     if logical["num_qubits"] > max_logical_qubits or len(active) > max_physical_qubits:
-        return {"status": "unsupported", "reason": "semantic_certificate_required", "logical_width": logical["num_qubits"], "active_physical_width": len(active), "scope": scope}
+        return {
+            "status": "unsupported",
+            "reason": "semantic_certificate_required",
+            "logical_width": logical["num_qubits"],
+            "active_physical_width": len(active),
+            "scope": scope,
+        }
     remap = {q: i for i, q in enumerate(active)}
     output = deepcopy(output)
     output["num_qubits"] = len(active)
@@ -41,8 +57,16 @@ def instrument_equivalence(logical, output, initial, final, *, max_logical_qubit
         def full_matrix(op, width, qargs):
             key = (repr(op), width, tuple(qargs))
             if key not in compiled:
-                circuit = {"schema_version": 1, "protocol": IR_PROTOCOL, "num_qubits": width, "num_clbits": 0,
-                           "qregs": [], "cregs": [], "global_phase": 0, "operations": [dict(op, qargs=qargs, cargs=[])]}
+                circuit = {
+                    "schema_version": 1,
+                    "protocol": IR_PROTOCOL,
+                    "num_qubits": width,
+                    "num_clbits": 0,
+                    "qregs": [],
+                    "cregs": [],
+                    "global_phase": 0,
+                    "operations": [dict(op, qargs=qargs, cargs=[])],
+                }
                 compiled[key] = Operator(import_circuit(circuit)).data
             return compiled[key]
 
@@ -54,13 +78,20 @@ def instrument_equivalence(logical, output, initial, final, *, max_logical_qubit
                 if name in {"while_loop", "for_loop", "switch_case", "box"}:
                     raise NotImplementedError(f"Unsupported control flow {name}")
                 qs, cs = [qmap[q] for q in op["qargs"]], [cmap[c] for c in op["cargs"]]
-                evolved = defaultdict(lambda: np.zeros((2 ** width, 2 ** width), dtype=complex))
+                evolved = defaultdict(lambda: np.zeros((2**width, 2**width), dtype=complex))
                 for classical, rho in states.items():
                     if name == "if_else":
                         condition = op["condition"]
-                        value = sum(((classical >> cmap[c]) & 1) << i for i, c in enumerate(condition["bits"]))
+                        value = sum(
+                            ((classical >> cmap[c]) & 1) << i
+                            for i, c in enumerate(condition["bits"])
+                        )
                         branch = 0 if value == condition["value"] else 1
-                        selected = execute(op["blocks"][branch], {classical: rho}, qs, cs, width) if branch < len(op["blocks"]) else {classical: rho}
+                        selected = (
+                            execute(op["blocks"][branch], {classical: rho}, qs, cs, width)
+                            if branch < len(op["blocks"])
+                            else {classical: rho}
+                        )
                         for bits, matrix in selected.items():
                             evolved[bits] += matrix
                     elif name in {"measure", "reset"}:
@@ -68,14 +99,16 @@ def instrument_equivalence(logical, output, initial, final, *, max_logical_qubit
                             raise ValueError("Non-unary measurement/reset")
                         q = qs[0]
                         for value in (0, 1):
-                            selected = np.array([int((i >> q) & 1) == value for i in range(2 ** width)])
+                            selected = np.array(
+                                [int((i >> q) & 1) == value for i in range(2**width)]
+                            )
                             branch = rho * selected[:, None] * selected[None, :]
                             if name == "measure":
                                 bits = (classical & ~(1 << cs[0])) | (value << cs[0])
                             else:
                                 bits = classical
                                 if value:
-                                    permutation = np.arange(2 ** width) ^ (1 << q)
+                                    permutation = np.arange(2**width) ^ (1 << q)
                                     branch = branch[np.ix_(permutation, permutation)]
                             evolved[bits] += branch
                     else:
@@ -88,25 +121,63 @@ def instrument_equivalence(logical, output, initial, final, *, max_logical_qubit
             return sum(((index >> q) & 1) << physical for q, physical in enumerate(locations))
 
         discarded = [q for q in range(m) if q not in final]
-        extract = np.array([[embed_index(i, final) | embed_index(a, discarded) for i in range(2 ** n)] for a in range(2 ** len(discarded))])
+        extract = np.array(
+            [
+                [embed_index(i, final) | embed_index(a, discarded) for i in range(2**n)]
+                for a in range(2 ** len(discarded))
+            ]
+        )
         max_error = 0.0
-        for i in range(2 ** n):
-            for j in range(2 ** n):
-                source = np.zeros((2 ** n, 2 ** n), dtype=complex)
+        for i in range(2**n):
+            for j in range(2**n):
+                source = np.zeros((2**n, 2**n), dtype=complex)
                 source[i, j] = 1
-                encoded = np.zeros((2 ** m, 2 ** m), dtype=complex)
+                encoded = np.zeros((2**m, 2**m), dtype=complex)
                 encoded[embed_index(i, initial), embed_index(j, initial)] = 1
-                expected = execute(logical, {0: source}, list(range(n)), list(range(logical["num_clbits"])), n)
-                measured = execute(output, {0: encoded}, list(range(m)), list(range(output["num_clbits"])), m)
+                expected = execute(
+                    logical, {0: source}, list(range(n)), list(range(logical["num_clbits"])), n
+                )
+                measured = execute(
+                    output, {0: encoded}, list(range(m)), list(range(output["num_clbits"])), m
+                )
                 for bits in expected.keys() | measured.keys():
                     observed = measured.get(bits)
-                    reduced = sum((observed[np.ix_(indices, indices)] for indices in extract), np.zeros_like(source)) if observed is not None else np.zeros_like(source)
-                    error = float(np.max(np.abs(expected.get(bits, np.zeros_like(source)) - reduced)))
+                    reduced = (
+                        sum(
+                            (observed[np.ix_(indices, indices)] for indices in extract),
+                            np.zeros_like(source),
+                        )
+                        if observed is not None
+                        else np.zeros_like(source)
+                    )
+                    error = float(
+                        np.max(np.abs(expected.get(bits, np.zeros_like(source)) - reduced))
+                    )
                     max_error = max(max_error, error)
                     if error > 1e-8:
-                        return {"status": "mismatch", "reason": "quantum_instrument_changed", "matrix_unit": [i, j], "classical_value": bits, "max_error": error, "tolerance": 1e-8, "scope": scope}
-        return {"status": "verified", "covers": ["full_quantum_instrument"], "matrix_units_checked": 4 ** n, "max_error": max_error, "tolerance": 1e-8, "scope": scope}
+                        return {
+                            "status": "mismatch",
+                            "reason": "quantum_instrument_changed",
+                            "matrix_unit": [i, j],
+                            "classical_value": bits,
+                            "max_error": error,
+                            "tolerance": 1e-8,
+                            "scope": scope,
+                        }
+        return {
+            "status": "verified",
+            "covers": ["full_quantum_instrument"],
+            "matrix_units_checked": 4**n,
+            "max_error": max_error,
+            "tolerance": 1e-8,
+            "scope": scope,
+        }
     except NotImplementedError as error:
         return {"status": "unsupported", "reason": str(error), "scope": scope}
     except Exception as error:
-        return {"status": "error", "reason": "instrument_oracle_error", "detail": f"{type(error).__name__}: {error}", "scope": scope}
+        return {
+            "status": "error",
+            "reason": "instrument_oracle_error",
+            "detail": f"{type(error).__name__}: {error}",
+            "scope": scope,
+        }

@@ -13,18 +13,30 @@ from benchpress_compare.store import Lease, LeaseBusy, Store, publish_bundle
 def comparison(tmp_path):
     root = tmp_path / "run"
     store = Store(tmp_path / "store")
-    atomic_write_json(root / "request.json", {"schema_version": 1, "config": {"store": str(tmp_path / "store")}})
+    atomic_write_json(
+        root / "request.json", {"schema_version": 1, "config": {"store": str(tmp_path / "store")}}
+    )
     return root, store
 
 
 def test_export_materializes_verified_cache_in_all_phases(comparison, tmp_path):
     root, store = comparison
     for phase, key in [("comparison", "abc"), ("preflight", "def")]:
-        record = {"schema_version": 1, "arm": "baseline", "status": "SUCCEEDED", "phase": phase,
-                  "observation_id": key, "validation_status": "verified"}
+        record = {
+            "schema_version": 1,
+            "arm": "baseline",
+            "status": "SUCCEEDED",
+            "phase": phase,
+            "observation_id": key,
+            "validation_status": "verified",
+        }
         store.publish("baseline/observations", key, record, {"compiled.bin": b"compiled"})
         cached = store.path("baseline/observations", key)
-        receipt = {**record, "cache_key": key, "cache_manifest_hash": file_hash(cached / "manifest.json")}
+        receipt = {
+            **record,
+            "cache_key": key,
+            "cache_manifest_hash": file_hash(cached / "manifest.json"),
+        }
         parent = root / "observations" if phase == "comparison" else root / phase / "observations"
         publish_bundle(parent / key, receipt, {"compiled.bin": b"compiled"})
     output = tmp_path / "export.tar"
@@ -52,7 +64,10 @@ def test_export_rejects_corrupt_committed_result(comparison, tmp_path):
 
 def test_export_refuses_incomplete_cache_reference(comparison, tmp_path):
     root, _ = comparison
-    publish_bundle(root / "observations/abc", {"schema_version": 1, "cache_key": "abc", "cache_manifest_hash": "missing"})
+    publish_bundle(
+        root / "observations/abc",
+        {"schema_version": 1, "cache_key": "abc", "cache_manifest_hash": "missing"},
+    )
     with pytest.raises(IntegrityError, match="incomplete"):
         export_run(root, tmp_path / "missing.tar")
 

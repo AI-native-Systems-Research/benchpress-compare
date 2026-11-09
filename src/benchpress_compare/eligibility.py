@@ -41,7 +41,9 @@ def _validation_verified(result: dict) -> bool:
     for name, check in checks.items():
         if not isinstance(check, dict):
             return False
-        if (name in REQUIRED_VALIDATION_CHECKS or check.get("required", True)) and check.get("status") != "verified":
+        if (name in REQUIRED_VALIDATION_CHECKS or check.get("required", True)) and check.get(
+            "status"
+        ) != "verified":
             return False
     return True
 
@@ -66,7 +68,13 @@ def evaluate_configuration(observations: Iterable[dict], *, seeds: list[int] | N
     sabre = []
     evidence = []
     for item in observations:
-        evidence.append({"observation_id": item.get("observation_id"), "seed": item.get("seed"), "result_hash": item.get("result_hash")})
+        evidence.append(
+            {
+                "observation_id": item.get("observation_id"),
+                "seed": item.get("seed"),
+                "result_hash": item.get("result_hash"),
+            }
+        )
         if str(item.get("status", "")).upper() not in _SUCCESS:
             reasons.append("preflight_" + str(item.get("status", "missing_status")).lower())
         if not _validation_verified(item):
@@ -86,8 +94,15 @@ def evaluate_configuration(observations: Iterable[dict], *, seeds: list[int] | N
             reasons.append("missing_inserted_swap_evidence")
         else:
             inserted.append(count)
-        replay = item.get("routing_replay", item.get("validation", {}).get("routing_replay") if isinstance(item.get("validation"), dict) else None)
-        if replay is not None and (not isinstance(replay, dict) or replay.get("status") != "verified"):
+        replay = item.get(
+            "routing_replay",
+            item.get("validation", {}).get("routing_replay")
+            if isinstance(item.get("validation"), dict)
+            else None,
+        )
+        if replay is not None and (
+            not isinstance(replay, dict) or replay.get("status") != "verified"
+        ):
             reasons.append("routing_replay_unverified")
     if reasons:
         status = "unresolved"
@@ -119,9 +134,11 @@ def evaluate_input(
     observations = list(observations)
     if any(item.get("input_id", input_id) != input_id for item in observations):
         raise ValueError("observation input identity mismatch")
-    expected = list(expected_cases) if expected_cases is not None else [
-        {"target_class": target, "level": level} for target in TARGETS for level in LEVELS
-    ]
+    expected = (
+        list(expected_cases)
+        if expected_cases is not None
+        else [{"target_class": target, "level": level} for target in TARGETS for level in LEVELS]
+    )
     configs = [(case["target_class"], case["level"]) for case in expected]
     if sorted(configs) != sorted((target, level) for target in TARGETS for level in LEVELS):
         raise ValueError("admission requires exactly six standard configurations")
@@ -135,10 +152,25 @@ def evaluate_input(
         grouped[configuration].append(item)
     records = []
     for case in expected:
-        result = evaluate_configuration(grouped[case["target_class"], case["level"]], seeds=case.get("preflight_seeds", case.get("seeds")))
-        records.append({"case_id": case.get("case_id"), "target_class": case["target_class"], "level": case["level"], **result})
-    embedding = dict(embedding or {"status": "unknown", "reason": "no_verified_embedding_certificate"})
-    if embedding.get("status") in {"verified", "verified_zero_routing"} and embedding.get("zero_routing", True) is True:
+        result = evaluate_configuration(
+            grouped[case["target_class"], case["level"]],
+            seeds=case.get("preflight_seeds", case.get("seeds")),
+        )
+        records.append(
+            {
+                "case_id": case.get("case_id"),
+                "target_class": case["target_class"],
+                "level": case["level"],
+                **result,
+            }
+        )
+    embedding = dict(
+        embedding or {"status": "unknown", "reason": "no_verified_embedding_certificate"}
+    )
+    if (
+        embedding.get("status") in {"verified", "verified_zero_routing"}
+        and embedding.get("zero_routing", True) is True
+    ):
         if not embedding.get("evidence"):
             raise ValueError("verified zero-routing embedding requires evidence")
         status, reasons = "ineligible", ["verified_zero_routing_embedding"]
@@ -156,7 +188,11 @@ def evaluate_input(
         "reasons": reasons,
         "embedding": embedding,
         "configurations": records,
-        "qualifying_configurations": [{"target_class": record["target_class"], "level": record["level"]} for record in records if record["status"] == "qualifying"],
+        "qualifying_configurations": [
+            {"target_class": record["target_class"], "level": record["level"]}
+            for record in records
+            if record["status"] == "qualifying"
+        ],
     }
 
 
@@ -185,26 +221,48 @@ def resolve_candidates(
         records[key] = dict(record)
     for key in candidate_ids:
         if key not in records:
-            records[key] = {"schema_version": 1, "input_id": key, "status": "unresolved", "reasons": ["missing_eligibility"]}
+            records[key] = {
+                "schema_version": 1,
+                "input_id": key,
+                "status": "unresolved",
+                "reasons": ["missing_eligibility"],
+            }
     assigned: set[str] = set()
     for group in structural_groups:
         members = list(group["members"])
         priority = list(group["priority"])
-        if set(priority) != set(members) or len(priority) != len(members) or len(set(members)) != len(members):
+        if (
+            set(priority) != set(members)
+            or len(priority) != len(members)
+            or len(set(members)) != len(members)
+        ):
             raise ValueError("structural priority must list every group member exactly once")
         if set(members) - set(candidate_ids) or assigned & set(members):
             raise ValueError("unknown or overlapping structural group members")
         assigned.update(members)
         if group.get("status") != "verified" or not group.get("evidence"):
             for key in members:
-                records[key] = {**records[key], "status": "unresolved", "reasons": ["unresolved_structural_equivalence"]}
+                records[key] = {
+                    **records[key],
+                    "status": "unresolved",
+                    "reasons": ["unresolved_structural_equivalence"],
+                }
             continue
-        representative = next((key for key in priority if records[key]["status"] == "admitted"), None)
+        representative = next(
+            (key for key in priority if records[key]["status"] == "admitted"), None
+        )
         for key in members:
             if key == representative:
-                records[key]["verified_structural_group"] = group.get("group_id", "|".join(priority))
+                records[key]["verified_structural_group"] = group.get(
+                    "group_id", "|".join(priority)
+                )
             elif records[key]["status"] == "admitted":
-                records[key] = {**records[key], "status": "ineligible", "reasons": ["structural_duplicate"], "representative": representative}
+                records[key] = {
+                    **records[key],
+                    "status": "ineligible",
+                    "reasons": ["structural_duplicate"],
+                    "representative": representative,
+                }
     unresolved = sorted(key for key, record in records.items() if record["status"] == "unresolved")
     admitted = sorted(key for key, record in records.items() if record["status"] == "admitted")
     return {

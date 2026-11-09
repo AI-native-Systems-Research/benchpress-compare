@@ -10,7 +10,9 @@ from benchpress_compare.errors import IntegrityError, PreparationError
 
 
 def git(path, *args):
-    return subprocess.run(["git", "-C", str(path), *args], check=True, capture_output=True, text=True)
+    return subprocess.run(
+        ["git", "-C", str(path), *args], check=True, capture_output=True, text=True
+    )
 
 
 @pytest.fixture
@@ -91,11 +93,13 @@ def test_concurrent_source_edit_aborts_snapshot(source, tmp_path, monkeypatch):
     import benchpress_compare.builds.snapshot as module
 
     real_copy = module.shutil.copyfile
+
     def mutate(origin, target):
         value = real_copy(origin, target)
         if Path(origin).name == "module.py":
             Path(origin).write_text("changed while copying")
         return value
+
     monkeypatch.setattr(module.shutil, "copyfile", mutate)
     with pytest.raises(PreparationError, match="changed during snapshot"):
         snapshot_source(source, tmp_path / "snapshot")
@@ -146,13 +150,16 @@ def test_build_environment_drops_undeclared_flags_and_source_imports(tmp_path, m
     monkeypatch.setenv("PYTHONPATH", "/tmp/unverified-qiskit")
     monkeypatch.setenv("QISKIT_BUILD_PROFILE", "debug")
     environment = sanitized_environment(tmp_path)
-    assert not {"RUSTFLAGS", "CARGO_PROFILE_RELEASE_LTO", "PYTHONPATH", "QISKIT_BUILD_PROFILE"} & environment.keys()
+    assert (
+        not {"RUSTFLAGS", "CARGO_PROFILE_RELEASE_LTO", "PYTHONPATH", "QISKIT_BUILD_PROFILE"}
+        & environment.keys()
+    )
     assert environment["UV_CACHE_DIR"].startswith(str(tmp_path))
     assert environment["PYTHONNOUSERSITE"] == "1"
 
 
 def test_dynamic_dependency_files_are_in_common_contract(tmp_path):
-    (tmp_path / "pyproject.toml").write_text('''
+    (tmp_path / "pyproject.toml").write_text("""
 [build-system]
 requires = ["setuptools>=77", "setuptools-rust>=1.13"]
 build-backend = "setuptools.build_meta"
@@ -160,7 +167,7 @@ build-backend = "setuptools.build_meta"
 dynamic = ["dependencies"]
 [tool.setuptools.dynamic.dependencies]
 file = ["requirements.txt"]
-''')
+""")
     (tmp_path / "requirements.txt").write_text("numpy>=2 # comment\nscipy>=1.5\n")
     requirements, _ = _requirements(tmp_path)
     assert "numpy>=2" in requirements
@@ -168,7 +175,15 @@ file = ["requirements.txt"]
 
 
 def test_observation_build_identity_includes_actual_wheel_and_native_binaries():
-    first = binary_identity("same-input-build-key", "wheel-one", {"qiskit/_accelerate.so": "native-one"})
-    assert first == binary_identity("same-input-build-key", "wheel-one", {"qiskit/_accelerate.so": "native-one"})
-    assert first != binary_identity("same-input-build-key", "wheel-two", {"qiskit/_accelerate.so": "native-one"})
-    assert first != binary_identity("same-input-build-key", "wheel-one", {"qiskit/_accelerate.so": "native-two"})
+    first = binary_identity(
+        "same-input-build-key", "wheel-one", {"qiskit/_accelerate.so": "native-one"}
+    )
+    assert first == binary_identity(
+        "same-input-build-key", "wheel-one", {"qiskit/_accelerate.so": "native-one"}
+    )
+    assert first != binary_identity(
+        "same-input-build-key", "wheel-two", {"qiskit/_accelerate.so": "native-one"}
+    )
+    assert first != binary_identity(
+        "same-input-build-key", "wheel-one", {"qiskit/_accelerate.so": "native-two"}
+    )

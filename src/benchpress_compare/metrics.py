@@ -35,13 +35,19 @@ def validate_circuit(circuit: dict) -> None:
         condition = op.get("condition")
         if condition is not None:
             bits = condition.get("bits", [])
-            if not bits or any(type(i) is not int or not 0 <= i < circuit["num_clbits"] for i in bits):
+            if not bits or any(
+                type(i) is not int or not 0 <= i < circuit["num_clbits"] for i in bits
+            ):
                 raise ValueError("Invalid classical condition bits")
-            if type(condition.get("value")) is not int or not 0 <= condition["value"] < 2 ** len(bits):
+            if type(condition.get("value")) is not int or not 0 <= condition["value"] < 2 ** len(
+                bits
+            ):
                 raise ValueError("Invalid classical condition value")
         for block in op.get("blocks", []):
             validate_circuit(block)
-            if block["num_qubits"] != len(op.get("qargs", [])) or block["num_clbits"] != len(op.get("cargs", [])):
+            if block["num_qubits"] != len(op.get("qargs", [])) or block["num_clbits"] != len(
+                op.get("cargs", [])
+            ):
                 raise ValueError("Block wire map does not match container")
 
 

@@ -32,7 +32,9 @@ def interaction_workload(logical: dict) -> dict:
                 for block in op["blocks"]:
                     visit(block, qs)
             elif len(qs) > 2:
-                raise ValueError("Embedding search requires the post-initialization two-qubit workload")
+                raise ValueError(
+                    "Embedding search requires the post-initialization two-qubit workload"
+                )
             elif len(qs) == 2:
                 edges.add(tuple(sorted(qs)))
             elif op["name"] in {"reset", "measure"}:
@@ -40,9 +42,12 @@ def interaction_workload(logical: dict) -> dict:
                     requirements[q].add(op["name"])
 
     visit(logical, list(range(logical["num_qubits"])))
-    return {"num_qubits": logical["num_qubits"], "edges": sorted([list(e) for e in edges]),
-            "requirements": {str(q): sorted(names) for q, names in requirements.items()},
-            "control_flow": sorted(control_flow)}
+    return {
+        "num_qubits": logical["num_qubits"],
+        "edges": sorted([list(e) for e in edges]),
+        "requirements": {str(q): sorted(names) for q, names in requirements.items()},
+        "control_flow": sorted(control_flow),
+    }
 
 
 def _target_graph(target):
@@ -58,7 +63,11 @@ def _target_graph(target):
     for prop in support["cz"]["properties"]:
         qs = prop["qargs"]
         if qs is None:
-            edges.update((a, b) for a in range(target["num_qubits"]) for b in range(a + 1, target["num_qubits"]))
+            edges.update(
+                (a, b)
+                for a in range(target["num_qubits"])
+                for b in range(a + 1, target["num_qubits"])
+            )
         else:
             edges.add(tuple(sorted(qs)))
     adjacency = {q: set() for q in range(target["num_qubits"])}
@@ -68,7 +77,11 @@ def _target_graph(target):
     allowed = {}
     for name, spec in support.items():
         if spec["arity"] == 1:
-            allowed[name] = set(range(target["num_qubits"])) if any(p["qargs"] is None for p in spec["properties"]) else {p["qargs"][0] for p in spec["properties"]}
+            allowed[name] = (
+                set(range(target["num_qubits"]))
+                if any(p["qargs"] is None for p in spec["properties"])
+                else {p["qargs"][0] for p in spec["properties"]}
+            )
     return adjacency, allowed, support
 
 
@@ -77,24 +90,40 @@ def verify_embedding(logical: dict, target: dict, mapping: list[int]) -> dict:
         workload = interaction_workload(logical)
         adjacency, allowed, support = _target_graph(target)
         width = workload["num_qubits"]
-        if len(mapping) != width or len(set(mapping)) != width or any(type(p) is not int or p not in adjacency for p in mapping):
+        if (
+            len(mapping) != width
+            or len(set(mapping)) != width
+            or any(type(p) is not int or p not in adjacency for p in mapping)
+        ):
             return {"status": "mismatch", "reason": "invalid_mapping"}
         for a, b in workload["edges"]:
             if mapping[b] not in adjacency[mapping[a]]:
                 return {"status": "mismatch", "reason": "interaction_not_embedded", "edge": [a, b]}
         for q, names in workload["requirements"].items():
             if any(mapping[int(q)] not in allowed.get(name, set()) for name in names):
-                return {"status": "mismatch", "reason": "mapped_instruction_unsupported", "logical_qubit": int(q)}
+                return {
+                    "status": "mismatch",
+                    "reason": "mapped_instruction_unsupported",
+                    "logical_qubit": int(q),
+                }
         if not set(workload["control_flow"]).issubset(support):
             return {"status": "mismatch", "reason": "control_flow_unsupported"}
-        evidence = {"schema_version": 1, "algorithm": "checked-cz-subgraph-v1", "workload_hash": canonical_hash(workload),
-                    "target_hash": target["target_hash"], "mapping": mapping, "checked_edges": len(workload["edges"])}
+        evidence = {
+            "schema_version": 1,
+            "algorithm": "checked-cz-subgraph-v1",
+            "workload_hash": canonical_hash(workload),
+            "target_hash": target["target_hash"],
+            "mapping": mapping,
+            "checked_edges": len(workload["edges"]),
+        }
         return {"status": "verified", "zero_routing": True, "evidence": evidence}
     except (KeyError, ValueError, TypeError) as error:
         return {"status": "unsupported", "reason": str(error)}
 
 
-def search_embedding(logical: dict, target: dict, *, budget_seconds: float = 1.0, max_nodes: int = 100_000) -> dict:
+def search_embedding(
+    logical: dict, target: dict, *, budget_seconds: float = 1.0, max_nodes: int = 100_000
+) -> dict:
     if budget_seconds <= 0 or max_nodes < 1:
         raise ValueError("Embedding search requires positive time and node budgets")
     started = time.monotonic()
@@ -146,15 +175,36 @@ def search_embedding(logical: dict, target: dict, *, budget_seconds: float = 1.0
         return False
 
     try:
-        found = False if width > target["num_qubits"] or not set(workload["control_flow"]).issubset(support) else backtrack()
+        found = (
+            False
+            if width > target["num_qubits"] or not set(workload["control_flow"]).issubset(support)
+            else backtrack()
+        )
     except TimeoutError:
-        return {"status": "unknown", "reason": "embedding_search_budget", "visited_nodes": visited,
-                "budget_seconds": budget_seconds, "max_nodes": max_nodes, "elapsed_seconds": time.monotonic() - started}
+        return {
+            "status": "unknown",
+            "reason": "embedding_search_budget",
+            "visited_nodes": visited,
+            "budget_seconds": budget_seconds,
+            "max_nodes": max_nodes,
+            "elapsed_seconds": time.monotonic() - started,
+        }
     if found:
         result = verify_embedding(logical, target, [mapping[q] for q in range(width)])
     else:
-        result = {"status": "not_found", "zero_routing": False, "reason": "bounded_search_exhausted_graph",
-                  "evidence": {"workload_hash": canonical_hash(workload), "target_hash": target["target_hash"]}}
-    result.update(visited_nodes=visited, elapsed_seconds=time.monotonic() - started,
-                  budget_seconds=budget_seconds, max_nodes=max_nodes)
+        result = {
+            "status": "not_found",
+            "zero_routing": False,
+            "reason": "bounded_search_exhausted_graph",
+            "evidence": {
+                "workload_hash": canonical_hash(workload),
+                "target_hash": target["target_hash"],
+            },
+        }
+    result.update(
+        visited_nodes=visited,
+        elapsed_seconds=time.monotonic() - started,
+        budget_seconds=budget_seconds,
+        max_nodes=max_nodes,
+    )
     return result

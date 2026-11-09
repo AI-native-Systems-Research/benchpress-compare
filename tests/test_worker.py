@@ -25,7 +25,10 @@ def test_native_budget_and_instrumentation_do_not_change_compilation():
     assert measure(export_circuit(output)) == measure(export_circuit(clean))
     assert diagnostics["sabre_executed"]
     assert diagnostics["inserted_swaps"] > 0
-    assert diagnostics["native_calls"][0]["effective_trials"] == {"num_random_trials": 20, "num_swap_trials": 20}
+    assert diagnostics["native_calls"][0]["effective_trials"] == {
+        "num_random_trials": 20,
+        "num_swap_trials": 20,
+    }
     assert diagnostics["routing_replay"]["status"] == "verified"
     assert "routing-0.json" in artifacts
 
@@ -41,12 +44,21 @@ def test_original_swap_elision_is_separate_from_inserted_routing_swaps():
     circuit.h(0)
     circuit.swap(0, 1)
     circuit.cx(1, 2)
-    output, diagnostics, _ = compile_observation(circuit, import_target(synthetic_target("square", 3)), 2, 19)
+    output, diagnostics, _ = compile_observation(
+        circuit, import_target(synthetic_target("square", 3)), 2, 19
+    )
     assert diagnostics["original_explicit_swaps"] == 1
     assert diagnostics["elided_permutations"]
     assert diagnostics["inserted_swaps"] == 0
-    assert validate_semantics(export_circuit(circuit), export_circuit(output),
-        output.layout.initial_index_layout(True), output.layout.final_index_layout(True))["status"] == "verified"
+    assert (
+        validate_semantics(
+            export_circuit(circuit),
+            export_circuit(output),
+            output.layout.initial_index_layout(True),
+            output.layout.final_index_layout(True),
+        )["status"]
+        == "verified"
+    )
 
 
 def test_worker_fresh_process_receipt_and_artifacts(tmp_path):
@@ -63,18 +75,47 @@ def test_worker_fresh_process_receipt_and_artifacts(tmp_path):
     atomic_write_json(tmp_path / "fixture.json", fixture)
     target = synthetic_target("square", 2)
     atomic_write_json(tmp_path / "target.json", target)
-    spec = {"schema_version": 1, "task": "observation", "observation_id": "observation", "case_id": "case", "arm": "baseline", "phase": "preflight",
-            "build_id": "integration-test", "attempt_id": "attempt", "run_id": "run", "submission_token": "token", "plan_hash": None,
-            "lease_generation": 1, "seed": 12, "level": 2, "runtime_profile": {"native_threads": 1},
-            "fixture_path": str(tmp_path / "fixture.json"), "target_path": str(tmp_path / "target.json"), "output_dir": str(tmp_path / "attempt")}
+    spec = {
+        "schema_version": 1,
+        "task": "observation",
+        "observation_id": "observation",
+        "case_id": "case",
+        "arm": "baseline",
+        "phase": "preflight",
+        "build_id": "integration-test",
+        "attempt_id": "attempt",
+        "run_id": "run",
+        "submission_token": "token",
+        "plan_hash": None,
+        "lease_generation": 1,
+        "seed": 12,
+        "level": 2,
+        "runtime_profile": {"native_threads": 1},
+        "fixture_path": str(tmp_path / "fixture.json"),
+        "target_path": str(tmp_path / "target.json"),
+        "output_dir": str(tmp_path / "attempt"),
+    }
     atomic_write_json(tmp_path / "spec.json", spec)
-    process = subprocess.run([sys.executable, "-m", "benchpress_compare.worker", str(tmp_path / "spec.json")], cwd=tmp_path, text=True, capture_output=True)
+    process = subprocess.run(
+        [sys.executable, "-m", "benchpress_compare.worker", str(tmp_path / "spec.json")],
+        cwd=tmp_path,
+        text=True,
+        capture_output=True,
+    )
     receipt = json.loads((tmp_path / "attempt" / "receipt.json").read_text())
     assert process.returncode == 0, receipt
     assert receipt["status"] == "SUCCEEDED"
     assert receipt["validation"]["status"] == "verified"
     assert receipt["N2"] == 1
-    for field in ("observation_id", "case_id", "attempt_id", "plan_hash", "lease_generation", "runtime_profile", "submission_token"):
+    for field in (
+        "observation_id",
+        "case_id",
+        "attempt_id",
+        "plan_hash",
+        "lease_generation",
+        "runtime_profile",
+        "submission_token",
+    ):
         assert receipt[field] == spec[field]
     for path, digest in receipt["artifacts"].items():
         assert file_hash(tmp_path / "attempt" / path) == digest
@@ -83,14 +124,24 @@ def test_worker_fresh_process_receipt_and_artifacts(tmp_path):
 def test_invalid_fixture_never_compiles_or_publishes_success(tmp_path):
     pytest.importorskip("qiskit")
     from benchpress_compare.worker import run_spec
-    atomic_write_json(tmp_path / "fixture.json", {"schema_version": 1, "logical": {}, "fixture_hash": "wrong"})
-    receipt = run_spec({"fixture_path": str(tmp_path / "fixture.json"), "output_dir": str(tmp_path / "attempt"), "task": "observation"})
+
+    atomic_write_json(
+        tmp_path / "fixture.json", {"schema_version": 1, "logical": {}, "fixture_hash": "wrong"}
+    )
+    receipt = run_spec(
+        {
+            "fixture_path": str(tmp_path / "fixture.json"),
+            "output_dir": str(tmp_path / "attempt"),
+            "task": "observation",
+        }
+    )
     assert receipt["status"] == "HARNESS_FAILED"
     assert "hash/schema mismatch" in receipt["error"]
 
 
 def test_attempt_receipt_is_immutable(tmp_path):
     from benchpress_compare.worker import run_spec
+
     (tmp_path / "receipt.json").write_text("{}")
     with pytest.raises(ValueError, match="immutable"):
         run_spec({"output_dir": str(tmp_path)})
@@ -107,16 +158,30 @@ def test_runtime_attestation_checks_host_abi_and_machine(tmp_path):
 
     root = Path(sys.prefix).resolve()
     native = Path(importlib.import_module("qiskit._accelerate").__file__).resolve()
-    attestation = {"python": platform.python_version(), "implementation": platform.python_implementation(),
-                   "abi": sysconfig.get_config_var("SOABI"), "platform": sysconfig.get_platform(),
-                   "architecture": platform.machine(), "libc": list(platform.libc_ver()), "os": platform.system(),
-                   "qiskit_origin": str(Path(qiskit.__file__).resolve()), "accelerator_origin": str(native),
-                   "release_log_verified": True, "native_hashes": {str(native.relative_to(root)): file_hash(native)},
-                   "dependencies": sorted((d.metadata["Name"].lower().replace("_", "-"), d.version) for d in importlib.metadata.distributions())}
+    attestation = {
+        "python": platform.python_version(),
+        "implementation": platform.python_implementation(),
+        "abi": sysconfig.get_config_var("SOABI"),
+        "platform": sysconfig.get_platform(),
+        "architecture": platform.machine(),
+        "libc": list(platform.libc_ver()),
+        "os": platform.system(),
+        "qiskit_origin": str(Path(qiskit.__file__).resolve()),
+        "accelerator_origin": str(native),
+        "release_log_verified": True,
+        "native_hashes": {str(native.relative_to(root)): file_hash(native)},
+        "dependencies": sorted(
+            (d.metadata["Name"].lower().replace("_", "-"), d.version)
+            for d in importlib.metadata.distributions()
+        ),
+    }
     manifest = {"env_python": str(root / "bin/python"), "attestation": attestation}
     path = tmp_path / "manifest.json"
     atomic_write_json(path, manifest)
-    spec = {"manifest_path": str(path), "runtime_profile": {"machine": f"{platform.system()}-{platform.machine()}"}}
+    spec = {
+        "manifest_path": str(path),
+        "runtime_profile": {"machine": f"{platform.system()}-{platform.machine()}"},
+    }
     assert _attest_runtime(spec, qiskit)["build_attestation"] == "verified"
     with pytest.raises(ValueError, match="machine class"):
         _attest_runtime(dict(spec, runtime_profile={"machine": "wrong-machine"}), qiskit)
@@ -137,9 +202,13 @@ def test_execution_engine_runs_real_aa_and_reuses_only_committed_baseline(tmp_pa
     from benchpress_compare.store import Lease
     from benchpress_compare.targets import synthetic_target
 
-    monkeypatch.setattr("benchpress_compare.orchestrator.inventory", lambda **_: {
-        "usable_cpus": 4, "worker_memory_budget_bytes": 4 * 1024 ** 3,
-    })
+    monkeypatch.setattr(
+        "benchpress_compare.orchestrator.inventory",
+        lambda **_: {
+            "usable_cpus": 4,
+            "worker_memory_budget_bytes": 4 * 1024**3,
+        },
+    )
     circuit = qiskit.QuantumCircuit(3)
     circuit.h(0)
     circuit.cx(0, 1)
@@ -150,13 +219,26 @@ def test_execution_engine_runs_real_aa_and_reuses_only_committed_baseline(tmp_pa
     atomic_write_json(tmp_path / "fixture.json", fixture)
     atomic_write_json(tmp_path / "target.json", target)
     profile = runtime_profile(memory_gb=1, wall_seconds=60)
-    spec = {"schema_version": 1, "observation_id": canonical_hash("real-aa-worker"), "case_id": "real-aa-case", "task": "observation",
-            "phase": "comparison", "seed": 123, "level": 2, "build_id": "adapter-integration-only", "protocols": PROTOCOLS,
-            "runtime_profile": profile, "fixture_path": str(tmp_path / "fixture.json"), "target_path": str(tmp_path / "target.json"),
-            "python": sys.executable}
+    spec = {
+        "schema_version": 1,
+        "observation_id": canonical_hash("real-aa-worker"),
+        "case_id": "real-aa-case",
+        "task": "observation",
+        "phase": "comparison",
+        "seed": 123,
+        "level": 2,
+        "build_id": "adapter-integration-only",
+        "protocols": PROTOCOLS,
+        "runtime_profile": profile,
+        "fixture_path": str(tmp_path / "fixture.json"),
+        "target_path": str(tmp_path / "target.json"),
+        "python": sys.executable,
+    }
     root = tmp_path / "first"
     root.mkdir()
-    config = RunConfig("/unused/baseline", "/unused/evolve", str(tmp_path / "store"), str(root), workers="1")
+    config = RunConfig(
+        "/unused/baseline", "/unused/evolve", str(tmp_path / "store"), str(root), workers="1"
+    )
     specs = [dict(spec, arm=arm) for arm in ("baseline", "evolve")]
     with Lease(root / "state/controller.lease") as lease:
         engine = ExecutionEngine(root, config, lease, plan_hash="adapter-integration-plan")
@@ -172,9 +254,13 @@ def test_execution_engine_runs_real_aa_and_reuses_only_committed_baseline(tmp_pa
     assert len(read_results(root)) == 2
     second_root = tmp_path / "second"
     second_root.mkdir()
-    second_config = RunConfig("/unused/baseline", "/unused/evolve", str(tmp_path / "store"), str(second_root), workers="1")
+    second_config = RunConfig(
+        "/unused/baseline", "/unused/evolve", str(tmp_path / "store"), str(second_root), workers="1"
+    )
     with Lease(second_root / "state/controller.lease") as lease:
-        reused = ExecutionEngine(second_root, second_config, lease, plan_hash="second-plan").run(specs)
+        reused = ExecutionEngine(second_root, second_config, lease, plan_hash="second-plan").run(
+            specs
+        )
     assert reused[0]["cache_hit"] is True
     assert reused[1]["cache_hit"] is False
     assert len(list((second_root / "attempts" / work_key(specs[0])).glob("*/attempt.json"))) == 0

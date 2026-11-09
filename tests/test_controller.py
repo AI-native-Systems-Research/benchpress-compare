@@ -22,10 +22,17 @@ class Scheduler:
 
     def submit(self, command, directory, profile, *, name, token):
         self.submitted.append(command)
-        result = {"schema_version": 1, "executor": "lsf", "name": name, "token": token,
-                  "job_id": str(len(self.submitted)), "status": self.submit_status,
-                  "attempt_dir": str(directory), "runtime_profile": profile,
-                  "submitted_at": time.time()}
+        result = {
+            "schema_version": 1,
+            "executor": "lsf",
+            "name": name,
+            "token": token,
+            "job_id": str(len(self.submitted)),
+            "status": self.submit_status,
+            "attempt_dir": str(directory),
+            "runtime_profile": profile,
+            "submitted_at": time.time(),
+        }
         atomic_write_json(Path(directory) / "job.json", result)
         return result
 
@@ -36,12 +43,21 @@ def launch(tmp_path, monkeypatch):
     root.mkdir()
     site = tmp_path / "site.toml"
     site.write_text('[lsf]\nqueue="test"\ncontroller_python="/cluster/coordinator/bin/python"\n')
-    config = RunConfig("/source/baseline", "/source/evolve", str(tmp_path / "store"), str(root), executor="lsf", lsf_config=str(site))
+    config = RunConfig(
+        "/source/baseline",
+        "/source/evolve",
+        str(tmp_path / "store"),
+        str(root),
+        executor="lsf",
+        lsf_config=str(site),
+    )
     atomic_write_json(root / "request.json", {"schema_version": 1, "config": config.to_dict()})
     scheduler = Scheduler()
     monkeypatch.setattr("benchpress_compare.controller.LSFExecutor", lambda *_: scheduler)
     monkeypatch.setattr("benchpress_compare.preparation._snapshot_paths", lambda *_: {})
-    monkeypatch.setattr("benchpress_compare.preparation._harness_wheel", lambda *_: tmp_path / "harness.whl")
+    monkeypatch.setattr(
+        "benchpress_compare.preparation._harness_wheel", lambda *_: tmp_path / "harness.whl"
+    )
     return root, config, scheduler
 
 
@@ -87,7 +103,9 @@ def test_continuation_forwards_explicit_unresolved_decision(launch):
     submit_controller(config)
     assert "--accept-unresolved" in scheduler.submitted[0]
     assert read_json(root / "request.json")["config"]["accept_unresolved"] is False
-    assert read_json(root / "jobs/controller.json")["controller_options"]["accept_unresolved"] is True
+    assert (
+        read_json(root / "jobs/controller.json")["controller_options"]["accept_unresolved"] is True
+    )
 
 
 def test_active_controller_actions_cannot_be_silently_changed(launch):
@@ -101,19 +119,24 @@ def test_active_controller_actions_cannot_be_silently_changed(launch):
 def test_complete_run_does_not_submit_another_controller(launch):
     root, config, scheduler = launch
     submit_controller(config)
-    atomic_write_json(root / "state/status.json", {"schema_version": 1, "status": "COMPLETE", "updated_at": time.time()})
+    atomic_write_json(
+        root / "state/status.json",
+        {"schema_version": 1, "status": "COMPLETE", "updated_at": time.time()},
+    )
     submit_controller(config)
     assert len(scheduler.submitted) == 1
 
 
 def test_follow_ignores_terminal_state_from_older_controller(launch, monkeypatch):
     _, config, scheduler = launch
-    states = iter([
-        {"status": "PREPARATION_FAILED", "updated_at": 1},
-        {"status": "COMPLETE", "updated_at": 3},
-    ])
+    states = iter(
+        [
+            {"status": "PREPARATION_FAILED", "updated_at": 1},
+            {"status": "COMPLETE", "updated_at": 3},
+        ]
+    )
     monkeypatch.setattr("benchpress_compare.controller.status", lambda *_: next(states))
     monkeypatch.setattr("benchpress_compare.controller.time.sleep", lambda _: None)
-    scheduler.site = type("Site", (), {"poll_seconds": .01})()
+    scheduler.site = type("Site", (), {"poll_seconds": 0.01})()
     assert follow_controller(config, {"submitted_at": 2}) == "COMPLETE"
     assert scheduler.polls == 1

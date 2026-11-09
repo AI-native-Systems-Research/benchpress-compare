@@ -117,7 +117,9 @@ def allocate_weights(inputs: Iterable[dict], *, require_all_families: bool = Tru
         marginals["sensitivity_band"][band] += sensitivity
     total = sum(marginals["family"].values(), Fraction())
     expected = Fraction(len(families), 8)
-    if total != expected or any(weight != Fraction(1, 8) for weight in marginals["family"].values()):
+    if total != expected or any(
+        weight != Fraction(1, 8) for weight in marginals["family"].values()
+    ):
         raise WeightError("internal allocation invariant failed")
     concentrations = sorted(
         ({"input_id": key, "weight": value["input_weight"]} for key, value in allocations.items()),
@@ -131,14 +133,23 @@ def allocate_weights(inputs: Iterable[dict], *, require_all_families: bool = Tru
         "missing_families": missing,
         "total_weight": fraction_record(total),
         "inputs": allocations,
-        "supported_bands": {family: sorted(value, key=("S", "M", "L").index) for family, value in sorted(bands.items())},
-        "marginals": {name: {key: fraction_record(value) for key, value in sorted(mapping.items())} for name, mapping in marginals.items()},
+        "supported_bands": {
+            family: sorted(value, key=("S", "M", "L").index)
+            for family, value in sorted(bands.items())
+        },
+        "marginals": {
+            name: {key: fraction_record(value) for key, value in sorted(mapping.items())}
+            for name, mapping in marginals.items()
+        },
         "concentrations": concentrations,
-        "large_is_largest": bool(band_mass) and band_mass["L"] > max(band_mass["S"], band_mass["M"]),
+        "large_is_largest": bool(band_mass)
+        and band_mass["L"] > max(band_mass["S"], band_mass["M"]),
     }
 
 
-def assign_case_weights(cases: Iterable[dict], allocation: dict | None = None, *, require_all_families: bool = True) -> list[dict]:
+def assign_case_weights(
+    cases: Iterable[dict], allocation: dict | None = None, *, require_all_families: bool = True
+) -> list[dict]:
     cases = [dict(case) for case in cases]
     inputs = {}
     for case in cases:
@@ -152,7 +163,9 @@ def assign_case_weights(cases: Iterable[dict], allocation: dict | None = None, *
         if key in inputs and inputs[key] != metadata:
             raise WeightError(f"conflicting metadata for input {key}")
         inputs[key] = metadata
-    allocation = allocation or allocate_weights(inputs.values(), require_all_families=require_all_families)
+    allocation = allocation or allocate_weights(
+        inputs.values(), require_all_families=require_all_families
+    )
     for case in cases:
         if case.get("supplemental", False):
             case["weight"] = case["sensitivity_weight"] = fraction_record(0)
@@ -176,7 +189,9 @@ def audit_case_weights(cases: Iterable[dict], *, require_all_families: bool = Tr
         for field in ("weight", "sensitivity_weight"):
             if read_fraction(case[field]) < 0:
                 raise WeightError("negative weight")
-        if case.get("supplemental") and (read_fraction(case["weight"]) or read_fraction(case["sensitivity_weight"])):
+        if case.get("supplemental") and (
+            read_fraction(case["weight"]) or read_fraction(case["sensitivity_weight"])
+        ):
             raise WeightError("supplemental case has positive weight")
     for case in weighted:
         grouped[case["input_id"]].append(case)
@@ -189,7 +204,11 @@ def audit_case_weights(cases: Iterable[dict], *, require_all_families: bool = Tr
                 raise WeightError(f"unequal case weights within input {key}")
         for case in group:
             seeds = case.get("seeds", [])
-            if not seeds or len(seeds) != len(set(seeds)) or any(type(seed) is not int or seed < 0 for seed in seeds):
+            if (
+                not seeds
+                or len(seeds) != len(set(seeds))
+                or any(type(seed) is not int or seed < 0 for seed in seeds)
+            ):
                 raise WeightError(f"invalid comparison seed list: {case['case_id']}")
     if weighted and len({len(case["seeds"]) for case in weighted}) != 1:
         raise WeightError("comparison seed count differs across cases")
@@ -199,7 +218,10 @@ def audit_case_weights(cases: Iterable[dict], *, require_all_families: bool = Tr
     expected = Fraction(len(families), 8)
     output = {}
     for field in ("weight", "sensitivity_weight"):
-        totals = {key: defaultdict(Fraction) for key in ("family", "target", "level", "family_target_level")}
+        totals = {
+            key: defaultdict(Fraction)
+            for key in ("family", "target", "level", "family_target_level")
+        }
         total = Fraction()
         for case in weighted:
             weight = read_fraction(case[field])
@@ -207,9 +229,29 @@ def audit_case_weights(cases: Iterable[dict], *, require_all_families: bool = Tr
             totals["family"][case["family"]] += weight
             totals["target"][case["target_class"]] += weight
             totals["level"][str(case["level"])] += weight
-            totals["family_target_level"][f"{case['family']}/{case['target_class']}/{case['level']}"] += weight
-        checks = {"family": Fraction(1, 8), "target": expected / 3, "level": expected / 2, "family_target_level": Fraction(1, 48)}
-        if total != expected or any(value != checks[name] for name, values in totals.items() for value in values.values()):
+            totals["family_target_level"][
+                f"{case['family']}/{case['target_class']}/{case['level']}"
+            ] += weight
+        checks = {
+            "family": Fraction(1, 8),
+            "target": expected / 3,
+            "level": expected / 2,
+            "family_target_level": Fraction(1, 48),
+        }
+        if total != expected or any(
+            value != checks[name] for name, values in totals.items() for value in values.values()
+        ):
             raise WeightError(f"incorrect exact {field} marginals")
-        output[field] = {"total": fraction_record(total), **{name: {key: fraction_record(value) for key, value in sorted(values.items())} for name, values in totals.items()}}
-    return {"schema_version": 1, "case_count": len(weighted), "input_count": len(grouped), "marginals": output}
+        output[field] = {
+            "total": fraction_record(total),
+            **{
+                name: {key: fraction_record(value) for key, value in sorted(values.items())}
+                for name, values in totals.items()
+            },
+        }
+    return {
+        "schema_version": 1,
+        "case_count": len(weighted),
+        "input_count": len(grouped),
+        "marginals": output,
+    }

@@ -16,7 +16,18 @@ from ..identity import atomic_write_json, canonical_hash, file_hash, fsync_direc
 
 # Only root build locations are excluded for untracked files. A source directory
 # called e.g. tests/target is meaningful and must not disappear from snapshots.
-ROOT_OUTPUTS = {".git", ".venv", "venv", "build", "dist", "target", ".tox", ".pytest_cache", ".ruff_cache", ".mypy_cache"}
+ROOT_OUTPUTS = {
+    ".git",
+    ".venv",
+    "venv",
+    "build",
+    "dist",
+    "target",
+    ".tox",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".mypy_cache",
+}
 
 
 def _git(source: Path, *args: str) -> subprocess.CompletedProcess:
@@ -24,7 +35,11 @@ def _git(source: Path, *args: str) -> subprocess.CompletedProcess:
 
 
 def _ignored_output(relative: Path) -> bool:
-    return relative.parts[0] in ROOT_OUTPUTS or "__pycache__" in relative.parts or relative.suffix == ".pyc"
+    return (
+        relative.parts[0] in ROOT_OUTPUTS
+        or "__pycache__" in relative.parts
+        or relative.suffix == ".pyc"
+    )
 
 
 def _source_paths(source: Path) -> tuple[list[Path], list[dict]]:
@@ -38,7 +53,11 @@ def _source_paths(source: Path) -> tuple[list[Path], list[dict]]:
         if tracked.returncode or untracked.returncode:
             raise PreparationError(f"Cannot enumerate source Git contents: {source}")
         paths.update(Path(os.fsdecode(name)) for name in tracked.stdout.split(b"\0") if name)
-        paths.update(Path(os.fsdecode(name)) for name in untracked.stdout.split(b"\0") if name and not _ignored_output(Path(os.fsdecode(name))))
+        paths.update(
+            Path(os.fsdecode(name))
+            for name in untracked.stdout.split(b"\0")
+            if name and not _ignored_output(Path(os.fsdecode(name)))
+        )
         for relative in sorted(paths.copy()):
             path = source / relative
             if path.is_dir() and not path.is_symlink():
@@ -50,8 +69,12 @@ def _source_paths(source: Path) -> tuple[list[Path], list[dict]]:
                 revision = _git(path, "rev-parse", "HEAD")
                 if revision.returncode:
                     raise PreparationError(f"Submodule is not materialized: {relative}")
-                submodules.append({"path": relative.as_posix(), "revision": os.fsdecode(revision.stdout).strip()})
-                submodules.extend({**record, "path": (relative / record["path"]).as_posix()} for record in nested)
+                submodules.append(
+                    {"path": relative.as_posix(), "revision": os.fsdecode(revision.stdout).strip()}
+                )
+                submodules.extend(
+                    {**record, "path": (relative / record["path"]).as_posix()} for record in nested
+                )
     else:
         for directory, directories, files in os.walk(source, followlinks=False):
             root = Path(directory)
@@ -63,7 +86,11 @@ def _source_paths(source: Path) -> tuple[list[Path], list[dict]]:
                 elif path.is_symlink():
                     paths.add(relative)
                     directories.remove(name)
-            paths.update((root / name).relative_to(source) for name in files if not _ignored_output((root / name).relative_to(source)))
+            paths.update(
+                (root / name).relative_to(source)
+                for name in files
+                if not _ignored_output((root / name).relative_to(source))
+            )
     return sorted(paths), sorted(submodules, key=lambda record: record["path"])
 
 
@@ -73,7 +100,11 @@ def tree_manifest(source: Path | str, *, copied: bool = False) -> tuple[list[dic
     if copied:
         # The frozen copy has no Git index; unlike untracked live files, every
         # copied path is part of the source identity, including tracked outputs.
-        paths = sorted(path.relative_to(source) for path in source.rglob("*") if path.is_symlink() or path.is_file())
+        paths = sorted(
+            path.relative_to(source)
+            for path in source.rglob("*")
+            if path.is_symlink() or path.is_file()
+        )
         submodules = []
     records = []
     for relative in paths:
@@ -91,9 +122,24 @@ def tree_manifest(source: Path | str, *, copied: bool = False) -> tuple[list[dic
                 raise PreparationError(f"Broken or cyclic source link: {relative}") from exc
             if not target.is_relative_to(source):
                 raise PreparationError(f"Source link escapes tree: {relative}")
-            records.append({"path": relative.as_posix(), "type": "symlink", "mode": stat.S_IMODE(info.st_mode), "target": link})
+            records.append(
+                {
+                    "path": relative.as_posix(),
+                    "type": "symlink",
+                    "mode": stat.S_IMODE(info.st_mode),
+                    "target": link,
+                }
+            )
         elif stat.S_ISREG(info.st_mode):
-            records.append({"path": relative.as_posix(), "type": "file", "mode": stat.S_IMODE(info.st_mode), "sha256": file_hash(path), "size": info.st_size})
+            records.append(
+                {
+                    "path": relative.as_posix(),
+                    "type": "file",
+                    "mode": stat.S_IMODE(info.st_mode),
+                    "sha256": file_hash(path),
+                    "size": info.st_size,
+                }
+            )
         else:
             raise PreparationError(f"Unsupported source entry: {relative}")
     return records, submodules
@@ -117,7 +163,11 @@ def verify_snapshot(directory: Path | str) -> dict:
 
 def snapshot_source(source: Path | str, destination: Path | str) -> dict:
     source, destination = Path(source).resolve(), Path(destination).resolve()
-    if not source.is_dir() or destination.is_relative_to(source) or source.is_relative_to(destination):
+    if (
+        not source.is_dir()
+        or destination.is_relative_to(source)
+        or source.is_relative_to(destination)
+    ):
         raise PreparationError("Source must be a directory separate from its snapshot destination")
     before, submodules = tree_manifest(source)
     if not before:
@@ -126,7 +176,9 @@ def snapshot_source(source: Path | str, destination: Path | str) -> dict:
     if destination.exists():
         previous = verify_snapshot(destination)
         if previous["tree_hash"] != tree_hash:
-            raise IntegrityError(f"Snapshot destination already contains different sources: {destination}")
+            raise IntegrityError(
+                f"Snapshot destination already contains different sources: {destination}"
+            )
         return previous
     destination.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix=".snapshot-", dir=destination.parent))
@@ -140,7 +192,9 @@ def snapshot_source(source: Path | str, destination: Path | str) -> dict:
                 # Normalize absolute in-tree symlinks into portable relative
                 # paths. Absolute symlinks require a different representation.
                 if os.path.isabs(entry["target"]):
-                    raise PreparationError(f"Absolute source symlink is unsupported; use a relative link: {entry['path']}")
+                    raise PreparationError(
+                        f"Absolute source symlink is unsupported; use a relative link: {entry['path']}"
+                    )
                 target.symlink_to(entry["target"])
             else:
                 shutil.copyfile(source_file, target)
@@ -168,12 +222,21 @@ def snapshot_source(source: Path | str, destination: Path | str) -> dict:
         revision = _git(source, "rev-parse", "HEAD")
         status = _git(source, "status", "--porcelain", "--untracked-files=all")
         manifest = {
-            "schema_version": 1, "tree_hash": tree_hash, "files": before,
-            "source_location": str(source), "archive_hash": file_hash(archive),
-            "git_revision": os.fsdecode(revision.stdout).strip() if revision.returncode == 0 else None,
+            "schema_version": 1,
+            "tree_hash": tree_hash,
+            "files": before,
+            "source_location": str(source),
+            "archive_hash": file_hash(archive),
+            "git_revision": os.fsdecode(revision.stdout).strip()
+            if revision.returncode == 0
+            else None,
             "git_dirty": bool(status.stdout) if status.returncode == 0 else None,
             "submodules": submodules,
-            "exclusion_policy": {"version": 1, "untracked_root_outputs": sorted(ROOT_OUTPUTS), "generated_names": ["__pycache__", "*.pyc"]},
+            "exclusion_policy": {
+                "version": 1,
+                "untracked_root_outputs": sorted(ROOT_OUTPUTS),
+                "generated_names": ["__pycache__", "*.pyc"],
+            },
         }
         atomic_write_json(staging / "snapshot.json", manifest)
         for directory, _, _ in os.walk(staging, topdown=False):

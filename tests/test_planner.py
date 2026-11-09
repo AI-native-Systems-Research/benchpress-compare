@@ -16,9 +16,17 @@ def test_zero_capacity_and_override():
 
 
 def test_packing_splits_preserving_pairs_and_cache():
-    specs = [{"case_id": "c", "observation_id": f"o{s}", "seed": s, "arm": arm,
-              "runtime_profile": {"native_threads": 1}} for s in range(3)
-             for arm in ("baseline", "evolve")]
+    specs = [
+        {
+            "case_id": "c",
+            "observation_id": f"o{s}",
+            "seed": s,
+            "arm": arm,
+            "runtime_profile": {"native_threads": 1},
+        }
+        for s in range(3)
+        for arm in ("baseline", "evolve")
+    ]
     estimates = {"c": {"estimated_seconds": 10}}
     jobs = pack(specs, estimates, wall_limit=36)
     assert len(jobs) == 3
@@ -30,7 +38,15 @@ def test_packing_splits_preserving_pairs_and_cache():
 
 
 def test_pilot_includes_expensive_and_each_stratum():
-    cases = [{"case_id": str(i), "input_id": name, "family": "F1", "band": "S",
-              "target_class": "square", "level": 2} for i, name in
-             enumerate(("ordinary", "also", "Q/medium/factor247_n15"))]
+    cases = [
+        {
+            "case_id": str(i),
+            "input_id": name,
+            "family": "F1",
+            "band": "S",
+            "target_class": "square",
+            "level": 2,
+        }
+        for i, name in enumerate(("ordinary", "also", "Q/medium/factor247_n15"))
+    ]
     assert [case["case_id"] for case in pilot_selection(cases)] == ["0", "2"]

@@ -40,8 +40,13 @@ def _normalize(value):
 
 
 def canonical_bytes(value) -> bytes:
-    return json.dumps(_normalize(value), sort_keys=True, separators=(",", ":"),
-                      ensure_ascii=False, allow_nan=False).encode("utf-8")
+    return json.dumps(
+        _normalize(value),
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
 
 
 def canonical_hash(value) -> str:
@@ -66,6 +71,7 @@ def fsync_directory(path: str | Path) -> None:
     except OSError as exc:
         # Some platforms/filesystems cannot fsync directories. Other failures matter.
         import errno
+
         if exc.errno not in {errno.EINVAL, errno.ENOTSUP, errno.EBADF}:
             raise
 
@@ -89,28 +95,42 @@ def atomic_write_json(path: str | Path, value) -> None:
 def read_json(path: str | Path):
     def invalid_constant(value):
         raise IntegrityError(f"Nonfinite JSON value: {value}")
+
     with Path(path).open(encoding="utf-8") as stream:
         return json.load(stream, parse_constant=invalid_constant)
 
 
 def case_identity(fixture_hash: str, target_hash: str, level: int, contract_hash: str) -> str:
-    return canonical_hash({"kind": "case", "schema_version": 1, "fixture_hash": fixture_hash,
-                           "target_hash": target_hash, "level": level,
-                           "contract_hash": contract_hash})
+    return canonical_hash(
+        {
+            "kind": "case",
+            "schema_version": 1,
+            "fixture_hash": fixture_hash,
+            "target_hash": target_hash,
+            "level": level,
+            "contract_hash": contract_hash,
+        }
+    )
 
 
 def observation_identity(spec: dict) -> str:
     # Arm, attempt, cohort, labels, and total seed count deliberately do not enter.
     keys = ("case_id", "build_id", "seed", "phase", "runtime_profile", "protocols")
-    return canonical_hash({"kind": "observation", "schema_version": 1,
-                           **{key: spec[key] for key in keys}})
+    return canonical_hash(
+        {"kind": "observation", "schema_version": 1, **{key: spec[key] for key in keys}}
+    )
 
 
 def harness_identity() -> str:
     """Hash coordinator source independently of paths or wheel timestamps."""
     package = Path(__file__).resolve().parent
-    sources = {path.relative_to(package).as_posix(): file_hash(path)
-               for path in sorted(package.rglob("*.py")) if "__pycache__" not in path.parts}
+    sources = {
+        path.relative_to(package).as_posix(): file_hash(path)
+        for path in sorted(package.rglob("*.py"))
+        if "__pycache__" not in path.parts
+    }
     from .corpus import load_catalogue
-    return canonical_hash({"schema_version": 1, "sources": sources,
-                           "catalogue": canonical_hash(load_catalogue())})
+
+    return canonical_hash(
+        {"schema_version": 1, "sources": sources, "catalogue": canonical_hash(load_catalogue())}
+    )

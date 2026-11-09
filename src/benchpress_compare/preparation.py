@@ -19,10 +19,18 @@ from .config import RunConfig
 from .corpus import CORPUS_REVISION, load_catalogue, verify_corpus
 from .eligibility import evaluate_input, resolve_candidates
 from .errors import CompareError, IntegrityError, PreparationError, ReconciliationError
-from .identity import atomic_write_json, canonical_hash, case_identity, file_hash, fsync_directory, read_json, harness_identity
+from .identity import (
+    atomic_write_json,
+    canonical_hash,
+    case_identity,
+    file_hash,
+    fsync_directory,
+    read_json,
+    harness_identity,
+)
 from .orchestrator import ExecutionEngine, verify_plan
 from .pilot import estimate, pilot_selection, runtime_profile
-from .planner import observations_for, pack
+from .planner import observations_for, pack, recommendations
 from .schema import PROTOCOLS, TRANSPILE_CONTRACT, validate_record
 from .seeds import derive_seeds, seed_contract
 from .store import Lease, Store
@@ -42,18 +50,28 @@ def _harness_wheel(destination):
         # An installed wheel can be reconstructed from its installed distribution,
         # excluding interpreter-specific generated scripts and bytecode.
         import zipfile
+
         distribution = importlib.metadata.distribution("benchpress-compare")
         wheel = destination / f"benchpress_compare-{distribution.version}-py3-none-any.whl"
         with zipfile.ZipFile(wheel, "w", zipfile.ZIP_DEFLATED) as archive:
             for entry in distribution.files or []:
                 name = str(entry)
                 if name.startswith("benchpress_compare/") or ".dist-info/" in name:
-                    if "__pycache__" not in name and not name.endswith(".pyc") and ".." not in Path(name).parts:
+                    if (
+                        "__pycache__" not in name
+                        and not name.endswith(".pyc")
+                        and ".." not in Path(name).parts
+                    ):
                         archive.write(distribution.locate_file(entry), name)
         return wheel
     env = dict(os.environ, UV_CACHE_DIR=str(destination / "uv-cache"))
-    subprocess.run(["uv", "build", "--wheel", "--out-dir", str(destination), str(package_root)],
-                   env=env, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    subprocess.run(
+        ["uv", "build", "--wheel", "--out-dir", str(destination), str(package_root)],
+        env=env,
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
     wheels = list(destination.glob("benchpress_compare-*.whl"))
     if len(wheels) != 1:
         raise PreparationError("Could not prepare one pinned harness wheel")
@@ -80,7 +98,9 @@ def _corpus(config, root):
                     verify_corpus(extracted[0])
                     os.rename(extracted[0], mirror)
             except OSError as exc:
-                raise PreparationError(f"Cannot fetch pinned corpus; supply --corpus for an offline mirror: {exc}") from exc
+                raise PreparationError(
+                    f"Cannot fetch pinned corpus; supply --corpus for an offline mirror: {exc}"
+                ) from exc
             finally:
                 archive.unlink(missing_ok=True)
     manifest = verify_corpus(mirror)
@@ -99,8 +119,11 @@ def _snapshot_paths(config, root):
     baseline_staging = root / "snapshots/baseline-staging"
     # A completed snapshot pins an arm even if preparation was interrupted before
     # both references were published. Do not inspect the live source again.
-    baseline = (verify_snapshot(baseline_staging) if baseline_staging.exists()
-                else snapshot_source(config.baseline, baseline_staging))
+    baseline = (
+        verify_snapshot(baseline_staging)
+        if baseline_staging.exists()
+        else snapshot_source(config.baseline, baseline_staging)
+    )
     destination = store.path("sources", baseline["tree_hash"])
     with store.lease("sources", baseline["tree_hash"]) as lease:
         if destination.exists():
@@ -133,19 +156,37 @@ def _execute(engine, specs):
 
 
 def _task(engine, task, fields, *, python=sys.executable, profile=None):
-    profile = profile or runtime_profile(native_threads=engine.config.native_threads,
-                    wall_seconds=engine.config.wall_seconds, memory_gb=engine.config.worker_memory_gb)
-    identity = {"task": task, **fields, "python": str(python), "protocols": PROTOCOLS,
-                "runtime_profile": profile}
-    matching_builds = [build for build in getattr(engine, "builds", {}).values() if build["env_python"] == str(python)]
+    profile = profile or runtime_profile(
+        native_threads=engine.config.native_threads,
+        wall_seconds=engine.config.wall_seconds,
+        memory_gb=engine.config.worker_memory_gb,
+    )
+    identity = {
+        "task": task,
+        **fields,
+        "python": str(python),
+        "protocols": PROTOCOLS,
+        "runtime_profile": profile,
+    }
+    matching_builds = [
+        build
+        for build in getattr(engine, "builds", {}).values()
+        if build["env_python"] == str(python)
+    ]
     if matching_builds:
         identity["manifest_path"] = matching_builds[0]["manifest_path"]
         identity["build_id"] = matching_builds[0]["build_key"]
-    spec = {**identity, "schema_version": 1, "phase": "tasks",
-            "observation_id": canonical_hash(identity)}
+    spec = {
+        **identity,
+        "schema_version": 1,
+        "phase": "tasks",
+        "observation_id": canonical_hash(identity),
+    }
     result = _execute(engine, [spec])[0]
     if result["status"] != "SUCCEEDED":
-        raise PreparationError(f"Preparation task {task} failed: {result.get('reason', result.get('error', 'missing failure reason'))}")
+        raise PreparationError(
+            f"Preparation task {task} failed: {result.get('reason', result.get('error', 'missing failure reason'))}"
+        )
     return result["result"]
 
 
@@ -156,28 +197,62 @@ def _builds(engine, snapshots):
     manifests_path = root / "builds/manifests.json"
     if manifests_path.exists():
         saved = read_json(manifests_path)
-        builds = {arm: verify_build(Path(manifest["manifest_path"]).parent)
-                  for arm, manifest in saved["builds"].items()}
+        builds = {
+            arm: verify_build(Path(manifest["manifest_path"]).parent)
+            for arm, manifest in saved["builds"].items()
+        }
         _check_paired_builds(builds)
         return builds
     wheel = _harness_wheel(root / "preparation/harness")
-    common = _task(engine, "resolve-dependencies", {
-        "snapshots": list(snapshots.values()), "destination": str(root / "preparation/dependencies"),
-        "extra_requirements": ["psutil==7.1.3", "jsonschema==4.25.1", "qiskit-ibm-runtime==0.43.1"]})
-    build_profile = runtime_profile(native_threads=engine.site.build_cpus if engine.site else config.native_threads,
-                                    wall_seconds=engine.site.job_wall_seconds if engine.site else 14400,
-                                    memory_gb=engine.site.build_memory_gb if engine.site else config.worker_memory_gb)
+    common = _task(
+        engine,
+        "resolve-dependencies",
+        {
+            "snapshots": list(snapshots.values()),
+            "destination": str(root / "preparation/dependencies"),
+            "extra_requirements": [
+                "psutil==7.1.3",
+                "jsonschema==4.25.1",
+                "qiskit-ibm-runtime==0.43.1",
+            ],
+        },
+    )
+    build_profile = runtime_profile(
+        native_threads=engine.site.build_cpus if engine.site else config.native_threads,
+        wall_seconds=engine.site.job_wall_seconds if engine.site else 14400,
+        memory_gb=engine.site.build_memory_gb if engine.site else config.worker_memory_gb,
+    )
     builds = {}
     for arm in ("baseline", "evolve"):
         snapshot = verify_snapshot(snapshots[arm])
-        locator = canonical_hash({"source": snapshot["tree_hash"], "lock": common["requirements_hash"],
-                                  "harness": file_hash(wheel), "platform": platform.platform(),
-                                  "python": file_hash(sys.executable)})
-        destination = (engine.store.path("baseline/wheels", locator) if arm == "baseline" else root / "builds/evolve" / locator)
-        manifest = _task(engine, "build", {"snapshot": snapshots[arm], "destination": str(destination),
-                         "dependency_lock": common, "harness_wheel": str(wheel),
-                         "rustup_home": str(Path(os.environ.get("RUSTUP_HOME", Path.home() / ".rustup")).resolve())},
-                         profile=build_profile)
+        locator = canonical_hash(
+            {
+                "source": snapshot["tree_hash"],
+                "lock": common["requirements_hash"],
+                "harness": file_hash(wheel),
+                "platform": platform.platform(),
+                "python": file_hash(sys.executable),
+            }
+        )
+        destination = (
+            engine.store.path("baseline/wheels", locator)
+            if arm == "baseline"
+            else root / "builds/evolve" / locator
+        )
+        manifest = _task(
+            engine,
+            "build",
+            {
+                "snapshot": snapshots[arm],
+                "destination": str(destination),
+                "dependency_lock": common,
+                "harness_wheel": str(wheel),
+                "rustup_home": str(
+                    Path(os.environ.get("RUSTUP_HOME", Path.home() / ".rustup")).resolve()
+                ),
+            },
+            profile=build_profile,
+        )
         verified = verify_build(Path(manifest["manifest_path"]).parent)
         if verified != manifest:
             raise IntegrityError(f"{arm} build differs from its preparation task receipt")
@@ -200,7 +275,13 @@ def _check_paired_builds(builds):
         raise PreparationError("Paired builds used different native toolchains")
     dependencies = []
     for manifest in (baseline, evolve):
-        dependencies.append({name: version for name, version in manifest["attestation"]["dependencies"] if name != "qiskit"})
+        dependencies.append(
+            {
+                name: version
+                for name, version in manifest["attestation"]["dependencies"]
+                if name != "qiskit"
+            }
+        )
     if dependencies[0] != dependencies[1]:
         raise PreparationError("Paired builds have different installed dependency versions")
 
@@ -218,28 +299,51 @@ def _structural_groups(candidates, cases, observations):
         # Compare each stream position: seeds are independently derived per case.
         index = case["seeds"].index(result["seed"])
         key = (case["target_class"], case["level"], index)
-        signatures.setdefault(case["input_id"], {})[key] = result.get("diagnostics", {}).get("pre_layout_structure_hash")
+        signatures.setdefault(case["input_id"], {})[key] = result.get("diagnostics", {}).get(
+            "pre_layout_structure_hash"
+        )
     ids = {row["input_id"] for row in candidates}
     groups = []
     for canonical, variants in sorted(by_input.items()):
         members = [canonical, *sorted(variants)]
         if canonical not in ids:
             # Smoke selection cannot silently select only a variant without its canonical.
-            groups.append({"members": variants, "priority": variants, "status": "unresolved", "evidence": None})
+            groups.append(
+                {
+                    "members": variants,
+                    "priority": variants,
+                    "status": "unresolved",
+                    "evidence": None,
+                }
+            )
             continue
         contexts = [signatures.get(member, {}) for member in members]
-        verified = all(len(context) == 18 and all(context.values()) for context in contexts) and all(
-            context == contexts[0] for context in contexts[1:])
-        groups.append({"members": members, "priority": members, "status": "verified" if verified else "unresolved",
-                       "evidence": {"context_hashes": {member: sorted(signatures.get(member, {}).values())
-                                                     for member in members}} if verified else None})
+        verified = all(
+            len(context) == 18 and all(context.values()) for context in contexts
+        ) and all(context == contexts[0] for context in contexts[1:])
+        groups.append(
+            {
+                "members": members,
+                "priority": members,
+                "status": "verified" if verified else "unresolved",
+                "evidence": {
+                    "context_hashes": {
+                        member: sorted(signatures.get(member, {}).values()) for member in members
+                    }
+                }
+                if verified
+                else None,
+            }
+        )
     return groups
 
 
 def _checked_artifact(record, *, kind):
     """A cached task receipt must still identify the actual published artifact."""
     path = Path(record["path"])
-    if not path.is_file() or read_json(path) != {key: value for key, value in record.items() if key != "path"}:
+    if not path.is_file() or read_json(path) != {
+        key: value for key, value in record.items() if key != "path"
+    }:
         raise IntegrityError(f"Frozen {kind} differs from its preparation receipt: {path}")
     return record
 
@@ -253,9 +357,15 @@ def _revision_chain(root, parent_hash):
         remaining[path.stem] = revision
     chain = []
     while remaining:
-        children = [(digest, revision) for digest, revision in remaining.items() if revision.get("parent_hash") == parent_hash]
+        children = [
+            (digest, revision)
+            for digest, revision in remaining.items()
+            if revision.get("parent_hash") == parent_hash
+        ]
         if len(children) != 1:
-            raise IntegrityError("Preparation revisions fork or do not connect to the frozen contract")
+            raise IntegrityError(
+                "Preparation revisions fork or do not connect to the frozen contract"
+            )
         digest, revision = children[0]
         if revision.get("decision") != "accept-unresolved":
             raise IntegrityError("Unsupported preparation decision")
@@ -270,7 +380,9 @@ def _request_config(root, config, continue_existing):
     if request_path.exists():
         saved = read_json(request_path)["config"]
         if not continue_existing and saved != config.to_dict():
-            raise CompareError("Existing results directory has an incompatible request; choose a new directory")
+            raise CompareError(
+                "Existing results directory has an incompatible request; choose a new directory"
+            )
         return RunConfig(**saved)
     config.validate()
     allowed = {"state", "jobs", "logs", "snapshots", "preparation"}
@@ -309,62 +421,133 @@ def prepare(config: RunConfig, *, continue_existing=False, retry_cancelled=False
             engine.builds = builds
             fixtures = []
             for candidate in candidates:
-                destination = root / "fixtures/inputs" / (canonical_hash(candidate["input_id"]) + ".json")
-                fixture = _task(engine, "freeze-fixture", {
-                    "candidate": candidate, "corpus_root": str(mirror), "destination": str(destination),
-                    "master_seed": config.master_seed}, python=builds["baseline"]["env_python"])
+                destination = (
+                    root / "fixtures/inputs" / (canonical_hash(candidate["input_id"]) + ".json")
+                )
+                fixture = _task(
+                    engine,
+                    "freeze-fixture",
+                    {
+                        "candidate": candidate,
+                        "corpus_root": str(mirror),
+                        "destination": str(destination),
+                        "master_seed": config.master_seed,
+                    },
+                    python=builds["baseline"]["env_python"],
+                )
                 fixtures.append({**fixture, "path": str(destination)})
                 _checked_artifact(fixtures[-1], kind="fixture")
-            targets_result = _task(engine, "freeze-targets", {
-                "declared_widths": sorted({fixture["declared_width"] for fixture in fixtures}),
-                "destination": str(root / "fixtures/targets")}, python=builds["baseline"]["env_python"])
+            targets_result = _task(
+                engine,
+                "freeze-targets",
+                {
+                    "declared_widths": sorted({fixture["declared_width"] for fixture in fixtures}),
+                    "destination": str(root / "fixtures/targets"),
+                },
+                python=builds["baseline"]["env_python"],
+            )
             targets = targets_result["targets"]
             for target in targets:
                 _checked_artifact(target, kind="target")
             for arm in ("baseline", "evolve"):
-                imported = _task(engine, "validate-import", {"fixture_paths": [row["path"] for row in fixtures],
-                    "target_paths": [row["path"] for row in targets]}, python=builds[arm]["env_python"])
-                if (imported.get("status") != "verified" or imported.get("fixtures") != [row["fixture_hash"] for row in fixtures]
-                        or imported.get("targets") != [row["target_hash"] for row in targets]):
-                    raise IntegrityError(f"{arm} importer did not verify the expected frozen artifacts")
+                imported = _task(
+                    engine,
+                    "validate-import",
+                    {
+                        "fixture_paths": [row["path"] for row in fixtures],
+                        "target_paths": [row["path"] for row in targets],
+                    },
+                    python=builds[arm]["env_python"],
+                )
+                if (
+                    imported.get("status") != "verified"
+                    or imported.get("fixtures") != [row["fixture_hash"] for row in fixtures]
+                    or imported.get("targets") != [row["target_hash"] for row in targets]
+                ):
+                    raise IntegrityError(
+                        f"{arm} importer did not verify the expected frozen artifacts"
+                    )
             cases = []
             contract_hash = canonical_hash(TRANSPILE_CONTRACT)
             for fixture in fixtures:
                 from .targets import heavy_hex_distance
+
                 width = fixture["declared_width"]
                 side = math.isqrt(width - 1) + 1
                 distance = heavy_hex_distance(width)
-                capacities = {"square": side * side, "heavy-hex": (5 * distance * distance - 2 * distance - 1) // 2,
-                              "fake_torino": 133}
+                capacities = {
+                    "square": side * side,
+                    "heavy-hex": (5 * distance * distance - 2 * distance - 1) // 2,
+                    "fake_torino": 133,
+                }
                 for target_class in ("square", "heavy-hex", "fake_torino"):
-                    matches = [t for t in targets if t["target_class"] == target_class and t["num_qubits"] == capacities[target_class]]
+                    matches = [
+                        t
+                        for t in targets
+                        if t["target_class"] == target_class
+                        and t["num_qubits"] == capacities[target_class]
+                    ]
                     if len(matches) != 1:
-                        raise IntegrityError(f"Expected exactly one {target_class} snapshot at width {width}")
+                        raise IntegrityError(
+                            f"Expected exactly one {target_class} snapshot at width {width}"
+                        )
                     target = matches[0]
                     for level in (2, 3):
-                        case_id = case_identity(fixture["fixture_hash"], target["target_hash"], level, contract_hash)
-                        case = {"schema_version": 1, "case_id": case_id, "input_id": fixture["input_id"],
-                            "fixture_hash": fixture["fixture_hash"], "fixture_path": fixture["path"],
-                            "target_hash": target["target_hash"], "target_path": target["path"],
-                            "target_class": target_class, "target_id": target["snapshot_id"],
-                            "level": level, "family": fixture["family"], "recipe": fixture["recipe"], "band": fixture["band"],
-                            "active_width": fixture["active_width"], "declared_width": width,
+                        case_id = case_identity(
+                            fixture["fixture_hash"], target["target_hash"], level, contract_hash
+                        )
+                        case = {
+                            "schema_version": 1,
+                            "case_id": case_id,
+                            "input_id": fixture["input_id"],
+                            "fixture_hash": fixture["fixture_hash"],
+                            "fixture_path": fixture["path"],
+                            "target_hash": target["target_hash"],
+                            "target_path": target["path"],
+                            "target_class": target_class,
+                            "target_id": target["snapshot_id"],
+                            "level": level,
+                            "family": fixture["family"],
+                            "recipe": fixture["recipe"],
+                            "band": fixture["band"],
+                            "active_width": fixture["active_width"],
+                            "declared_width": width,
                             "active_occupancy": fixture["active_width"] / target["num_qubits"],
                             "declared_occupancy": width / target["num_qubits"],
-                            "occupancy": {"active": fixture["active_width"] / target["num_qubits"],
-                                          "declared": width / target["num_qubits"]},
+                            "occupancy": {
+                                "active": fixture["active_width"] / target["num_qubits"],
+                                "declared": width / target["num_qubits"],
+                            },
                             "seeds": derive_seeds(case_id, "preflight", 3, config.master_seed),
-                            "runtime_profile": runtime_profile(native_threads=config.native_threads,
-                                wall_seconds=config.wall_seconds, memory_gb=config.worker_memory_gb)}
+                            "runtime_profile": runtime_profile(
+                                native_threads=config.native_threads,
+                                wall_seconds=config.wall_seconds,
+                                memory_gb=config.worker_memory_gb,
+                            ),
+                        }
                         validate_record("Case", case)
                         cases.append(case)
-            contract = {"schema_version": 1, "config": config.to_dict(), "protocols": PROTOCOLS,
-                        "coordinator_hash": harness_identity(),
-                        "builds": builds, "catalogue_hash": canonical_hash(catalogue),
-                        "corpus": corpus_manifest, "fixtures": fixtures, "targets": targets,
-                        "cases": cases, "transpile_contract": TRANSPILE_CONTRACT,
-                        "validation_policy": {"required": "verified-semantic-routing-layout-target",
-                            "embedding": {"algorithm": "checked-cz-subgraph-v1", "budget_seconds": 1.0, "max_nodes": 100_000}}}
+            contract = {
+                "schema_version": 1,
+                "config": config.to_dict(),
+                "protocols": PROTOCOLS,
+                "coordinator_hash": harness_identity(),
+                "builds": builds,
+                "catalogue_hash": canonical_hash(catalogue),
+                "corpus": corpus_manifest,
+                "fixtures": fixtures,
+                "targets": targets,
+                "cases": cases,
+                "transpile_contract": TRANSPILE_CONTRACT,
+                "validation_policy": {
+                    "required": "verified-semantic-routing-layout-target",
+                    "embedding": {
+                        "algorithm": "checked-cz-subgraph-v1",
+                        "budget_seconds": 1.0,
+                        "max_nodes": 100_000,
+                    },
+                },
+            }
             prep_path = root / "preparation.json"
             if prep_path.exists():
                 if read_json(prep_path) != contract:
@@ -373,76 +556,189 @@ def prepare(config: RunConfig, *, continue_existing=False, retry_cancelled=False
                 atomic_write_json(prep_path, contract)
             engine.plan_hash = canonical_hash(contract)
             revisions = _revision_chain(root, engine.plan_hash)
-            accepted_unresolved = requested_accept_unresolved or config.accept_unresolved or any(
-                revision["decision"] == "accept-unresolved" for revision in revisions)
+            accepted_unresolved = (
+                requested_accept_unresolved
+                or config.accept_unresolved
+                or any(revision["decision"] == "accept-unresolved" for revision in revisions)
+            )
             engine.state("SCREENING")
             preflight_specs = observations_for(cases, builds, phase="preflight")
             preflight = _execute(engine, preflight_specs)
             records = []
             for fixture in fixtures:
                 rows = [row for row in preflight if row["input_id"] == fixture["input_id"]]
-                contexts = [{"observation_id": row["observation_id"], "case_id": row["case_id"],
-                             "seed": row["seed"], "result": row.get("diagnostics", {}).get("embedding",
-                                 {"status": "unknown", "reason": "no_completed_embedding_search"})} for row in rows]
-                verified = [context["result"] for context in contexts if context["result"].get("status") == "verified"
-                            and context["result"].get("zero_routing") is True and context["result"].get("evidence")]
-                embedding = ({**verified[0], "contexts": contexts} if verified else {
-                    "status": "unknown", "reason": "no_verified_zero_routing_embedding", "contexts": contexts})
-                records.append(evaluate_input(fixture["input_id"], rows, embedding=embedding,
-                    expected_cases=[case for case in cases if case["input_id"] == fixture["input_id"]]))
-            coverage = resolve_candidates(candidates, records, structural_groups=_structural_groups(candidates, cases, preflight),
-                                          accept_unresolved=accepted_unresolved)
+                contexts = [
+                    {
+                        "observation_id": row["observation_id"],
+                        "case_id": row["case_id"],
+                        "seed": row["seed"],
+                        "result": row.get("diagnostics", {}).get(
+                            "embedding",
+                            {"status": "unknown", "reason": "no_completed_embedding_search"},
+                        ),
+                    }
+                    for row in rows
+                ]
+                verified = [
+                    context["result"]
+                    for context in contexts
+                    if context["result"].get("status") == "verified"
+                    and context["result"].get("zero_routing") is True
+                    and context["result"].get("evidence")
+                ]
+                embedding = (
+                    {**verified[0], "contexts": contexts}
+                    if verified
+                    else {
+                        "status": "unknown",
+                        "reason": "no_verified_zero_routing_embedding",
+                        "contexts": contexts,
+                    }
+                )
+                records.append(
+                    evaluate_input(
+                        fixture["input_id"],
+                        rows,
+                        embedding=embedding,
+                        expected_cases=[
+                            case for case in cases if case["input_id"] == fixture["input_id"]
+                        ],
+                    )
+                )
+            coverage = resolve_candidates(
+                candidates,
+                records,
+                structural_groups=_structural_groups(candidates, cases, preflight),
+                accept_unresolved=accepted_unresolved,
+            )
             coverage["known_local"] = catalogue["coverage"]
             atomic_write_json(root / "coverage.json", coverage)
-            if accepted_unresolved and coverage["unresolved"] and not any(
-                    revision.get("unresolved") == coverage["unresolved"] for revision in revisions):
-                revision = {"schema_version": 1, "parent_hash": revisions[-1]["revision_hash"] if revisions else canonical_hash(contract),
-                            "decision": "accept-unresolved", "unresolved": coverage["unresolved"]}
-                atomic_write_json(root / "preparation/revisions" / (canonical_hash(revision) + ".json"), revision)
+            if (
+                accepted_unresolved
+                and coverage["unresolved"]
+                and not any(
+                    revision.get("unresolved") == coverage["unresolved"] for revision in revisions
+                )
+            ):
+                revision = {
+                    "schema_version": 1,
+                    "parent_hash": revisions[-1]["revision_hash"]
+                    if revisions
+                    else canonical_hash(contract),
+                    "decision": "accept-unresolved",
+                    "unresolved": coverage["unresolved"],
+                }
+                atomic_write_json(
+                    root / "preparation/revisions" / (canonical_hash(revision) + ".json"), revision
+                )
                 revisions.append({"revision_hash": canonical_hash(revision), **revision})
             if not coverage["freeze_allowed"]:
-                raise PreparationError(f"{len(coverage['unresolved'])} candidates have unresolved mandatory evidence; see coverage.json")
-            admitted = [fixture for fixture in fixtures if fixture["input_id"] in coverage["admitted"]]
+                raise PreparationError(
+                    f"{len(coverage['unresolved'])} candidates have unresolved mandatory evidence; see coverage.json"
+                )
+            admitted = [
+                fixture for fixture in fixtures if fixture["input_id"] in coverage["admitted"]
+            ]
             if not admitted:
-                raise PreparationError("No candidates passed all six configurations; no comparison plan published")
+                raise PreparationError(
+                    "No candidates passed all six configurations; no comparison plan published"
+                )
             try:
                 weights = allocate_weights(admitted, require_all_families=not bool(config.smoke))
             except WeightError as exc:
                 raise PreparationError(str(exc)) from exc
-            admitted_cases = [dict(case, seeds=derive_seeds(case["case_id"], "comparison", config.seeds, config.master_seed))
-                              for case in cases if case["input_id"] in coverage["admitted"]]
-            admitted_cases = assign_case_weights(admitted_cases, weights, require_all_families=not bool(config.smoke))
+            admitted_cases = [
+                dict(
+                    case,
+                    seeds=derive_seeds(
+                        case["case_id"], "comparison", config.seeds, config.master_seed
+                    ),
+                )
+                for case in cases
+                if case["input_id"] in coverage["admitted"]
+            ]
+            admitted_cases = assign_case_weights(
+                admitted_cases, weights, require_all_families=not bool(config.smoke)
+            )
             atomic_write_json(root / "weights.json", weights)
             engine.state("PILOTING")
-            pilots = [dict(case, seeds=derive_seeds(case["case_id"], "pilot", 1, config.master_seed))
-                      for case in pilot_selection(admitted_cases)]
+            pilots = [
+                dict(case, seeds=derive_seeds(case["case_id"], "pilot", 1, config.master_seed))
+                for case in pilot_selection(admitted_cases)
+            ]
             pilot_results = _execute(engine, observations_for(pilots, builds, phase="pilot"))
             if any(row["status"] != "SUCCEEDED" for row in pilot_results):
                 raise PreparationError("A required resource pilot failed; no final plan published")
-            estimates = estimate(admitted_cases, preflight + pilot_results, native_threads=config.native_threads,
-                                 max_wall_seconds=engine.site.job_wall_seconds if engine.site else config.wall_seconds,
-                                 max_memory_gb=config.worker_memory_gb)
+            estimates = estimate(
+                admitted_cases,
+                preflight + pilot_results,
+                native_threads=config.native_threads,
+                max_wall_seconds=engine.site.job_wall_seconds
+                if engine.site
+                else config.wall_seconds,
+                max_memory_gb=config.worker_memory_gb,
+            )
             profiles = {key: value["runtime_profile"] for key, value in estimates["cases"].items()}
             for case in admitted_cases:
                 case["runtime_profile"] = profiles[case["case_id"]]
             observations = observations_for(admitted_cases, builds, profiles=profiles)
-            bundles = pack(observations, estimates["cases"], wall_limit=engine.site.job_wall_seconds if engine.site else max(
-                           spec["runtime_profile"]["wall_seconds"] for spec in observations) * 12)
-            plan = {"schema_version": 1, "design": config.design, "config": config.to_dict(), "cases": admitted_cases,
-                    "coordinator_hash": harness_identity(),
-                    "corpus": corpus_manifest, "sources": snapshots,
-                    "seed_algorithm": seed_contract(config.master_seed), "runtime_profiles": profiles,
-                    "observations": observations, "builds": builds, "weights": weights, "coverage": coverage,
-                    "pilot": estimates, "bundles": bundles, "preparation_hash": canonical_hash(contract),
-                    "preparation_revisions": [revision["revision_hash"] for revision in revisions],
-                    "conditional_on_unresolved": coverage["conditional_on_unresolved"],
-                    "weights_audit": audit_case_weights(admitted_cases, require_all_families=not bool(config.smoke)),
-                    "expected_counts": {"candidates": len(candidates), "preflight": len(preflight_specs),
-                                        "cases": len(admitted_cases), "main_observations": len(observations)},
-                    "protocols": PROTOCOLS, "transpile_contract": TRANSPILE_CONTRACT,
-                    "corpus": corpus_manifest,
-                    "runtime_profiles": profiles,
-                    "artifact_hashes": {str(Path(row["path"]).relative_to(root)): file_hash(row["path"]) for row in fixtures + targets}}
+            bundles = pack(
+                observations,
+                estimates["cases"],
+                wall_limit=engine.site.job_wall_seconds
+                if engine.site
+                else max(spec["runtime_profile"]["wall_seconds"] for spec in observations) * 12,
+            )
+            cached = [
+                spec["observation_id"]
+                for spec in observations
+                if spec["arm"] == "baseline"
+                and engine.store.get("baseline/observations", spec["observation_id"]) is not None
+            ]
+            estimates["recommendations"] = recommendations(
+                observations,
+                estimates["cases"],
+                bundles,
+                engine.resources,
+                workers=config.workers if engine.site is None else "auto",
+                max_jobs=engine.site.max_jobs if engine.site else None,
+                cached_baseline_ids=cached,
+            )
+            plan = {
+                "schema_version": 1,
+                "design": config.design,
+                "config": config.to_dict(),
+                "cases": admitted_cases,
+                "coordinator_hash": harness_identity(),
+                "corpus": corpus_manifest,
+                "sources": snapshots,
+                "seed_algorithm": seed_contract(config.master_seed),
+                "runtime_profiles": profiles,
+                "observations": observations,
+                "builds": builds,
+                "weights": weights,
+                "coverage": coverage,
+                "pilot": estimates,
+                "bundles": bundles,
+                "preparation_hash": canonical_hash(contract),
+                "preparation_revisions": [revision["revision_hash"] for revision in revisions],
+                "conditional_on_unresolved": coverage["conditional_on_unresolved"],
+                "weights_audit": audit_case_weights(
+                    admitted_cases, require_all_families=not bool(config.smoke)
+                ),
+                "expected_counts": {
+                    "candidates": len(candidates),
+                    "preflight": len(preflight_specs),
+                    "cases": len(admitted_cases),
+                    "main_observations": len(observations),
+                },
+                "protocols": PROTOCOLS,
+                "transpile_contract": TRANSPILE_CONTRACT,
+                "artifact_hashes": {
+                    str(Path(row["path"]).relative_to(root)): file_hash(row["path"])
+                    for row in fixtures + targets
+                },
+            }
             plan["artifact_hashes"]["preparation.json"] = file_hash(prep_path)
             for revision in revisions:
                 relative = f"preparation/revisions/{revision['revision_hash']}.json"

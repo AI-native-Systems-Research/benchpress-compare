@@ -96,7 +96,9 @@ class Lease:
                 if previous["expires_at"] > time.time():
                     raise LeaseBusy(f"Lease held by {previous['owner']}: {self.path}")
             generation_path = self.path.with_name(self.path.name + ".generation")
-            previous_generation = _read_json(generation_path)["generation"] if generation_path.exists() else 0
+            previous_generation = (
+                _read_json(generation_path)["generation"] if generation_path.exists() else 0
+            )
             self.generation = previous_generation + 1
             atomic_write_json(generation_path, {"schema_version": 1, "generation": self.generation})
             record = self._record()
@@ -166,7 +168,10 @@ class Lease:
         with _guard(self.guard_path):
             if self.path.exists():
                 current = _read_json(self.path)
-                if current.get("token") == self.token and current.get("generation") == self.generation:
+                if (
+                    current.get("token") == self.token
+                    and current.get("generation") == self.generation
+                ):
                     self.path.unlink()
                     fsync_directory(self.path.parent)
         self.generation = None
@@ -180,7 +185,11 @@ class Lease:
 
 def _relative_name(value: str) -> Path:
     relative = Path(value)
-    if relative.is_absolute() or not relative.parts or any(part in {".", ".."} for part in relative.parts):
+    if (
+        relative.is_absolute()
+        or not relative.parts
+        or any(part in {".", ".."} for part in relative.parts)
+    ):
         raise ValueError(f"Unsafe artifact path: {value!r}")
     return relative
 
@@ -196,7 +205,11 @@ def verify_bundle(path: Path | str) -> dict | None:
     manifest = _read_json(path / "manifest.json")
     for name, expected in manifest.get("artifacts", {}).items():
         artifact = path / _relative_name(name)
-        if artifact.is_symlink() or not artifact.is_file() or not artifact.resolve().is_relative_to(path.resolve()):
+        if (
+            artifact.is_symlink()
+            or not artifact.is_file()
+            or not artifact.resolve().is_relative_to(path.resolve())
+        ):
             raise IntegrityError(f"Missing or escaping artifact: {artifact}")
         if file_hash(artifact) != expected:
             raise IntegrityError(f"Artifact checksum mismatch: {artifact}")
@@ -236,10 +249,17 @@ def publish_bundle(
             checksums[name] = file_hash(target)
         manifest = {"schema_version": 1, "record": dict(record), "artifacts": checksums}
         atomic_write_json(staging / "manifest.json", manifest)
-        atomic_write_json(staging / "COMPLETE", {"schema_version": 1, "manifest_hash": file_hash(staging / "manifest.json")})
+        atomic_write_json(
+            staging / "COMPLETE",
+            {"schema_version": 1, "manifest_hash": file_hash(staging / "manifest.json")},
+        )
         for directory, _, _ in os.walk(staging, topdown=False):
             fsync_directory(Path(directory))
-        publication_guard = lease.fenced() if lease else _guard(destination.parent / ("." + destination.name + ".publish.guard"))
+        publication_guard = (
+            lease.fenced()
+            if lease
+            else _guard(destination.parent / ("." + destination.name + ".publish.guard"))
+        )
         with publication_guard:
             if destination.exists():
                 existing = verify_bundle(destination)
@@ -247,7 +267,9 @@ def publish_bundle(
                     return existing
                 if existing is not None:
                     raise IntegrityError(f"Conflicting immutable publication: {destination}")
-                raise IntegrityError(f"Incomplete destination needs explicit reconciliation: {destination}")
+                raise IntegrityError(
+                    f"Incomplete destination needs explicit reconciliation: {destination}"
+                )
             os.rename(staging, destination)
             fsync_directory(destination.parent)
         return manifest
@@ -259,7 +281,15 @@ def publish_bundle(
 class Store:
     """Shared baseline store. Evolved artifacts have no publication namespace."""
 
-    CATEGORIES = frozenset({"sources", "baseline/wheels", "baseline/envs", "baseline/observations", "baseline/eligibility"})
+    CATEGORIES = frozenset(
+        {
+            "sources",
+            "baseline/wheels",
+            "baseline/envs",
+            "baseline/observations",
+            "baseline/eligibility",
+        }
+    )
 
     def __init__(self, root: Path | str):
         self.root = Path(root).resolve() / "benchpress-compare" / "v1"
@@ -282,10 +312,17 @@ class Store:
         return result
 
     def publish(
-        self, category: str, key: str, record: Mapping[str, Any], artifacts: Mapping[str, Path | bytes] | None = None,
+        self,
+        category: str,
+        key: str,
+        record: Mapping[str, Any],
+        artifacts: Mapping[str, Path | bytes] | None = None,
     ) -> dict:
         if category == "baseline/observations":
-            if record.get("arm") != "baseline" or str(record.get("status", "")).lower() not in {"succeeded", "success"}:
+            if record.get("arm") != "baseline" or str(record.get("status", "")).lower() not in {
+                "succeeded",
+                "success",
+            }:
                 raise ValueError("Only successful baseline observations are reusable")
             if record.get("validation_status") != "verified":
                 raise ValueError("Only verified observations are reusable")

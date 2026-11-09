@@ -38,15 +38,25 @@ def numeric(value):
 def export_circuit(circuit) -> dict:
     from qiskit.circuit import Clbit, ControlledGate
     from qiskit.circuit.controlflow import ControlFlowOp
-    from qiskit.circuit.library import PauliEvolutionGate, UnitaryGate, get_standard_gate_name_mapping
+    from qiskit.circuit.library import (
+        PauliEvolutionGate,
+        UnitaryGate,
+        get_standard_gate_name_mapping,
+    )
 
     standard = get_standard_gate_name_mapping()
     output = {
-        "schema_version": 1, "protocol": IR_PROTOCOL,
-        "num_qubits": circuit.num_qubits, "num_clbits": circuit.num_clbits,
+        "schema_version": 1,
+        "protocol": IR_PROTOCOL,
+        "num_qubits": circuit.num_qubits,
+        "num_clbits": circuit.num_clbits,
         "global_phase": number(circuit.global_phase),
-        "qregs": [{"name": r.name, "bits": [circuit.find_bit(b).index for b in r]} for r in circuit.qregs],
-        "cregs": [{"name": r.name, "bits": [circuit.find_bit(b).index for b in r]} for r in circuit.cregs],
+        "qregs": [
+            {"name": r.name, "bits": [circuit.find_bit(b).index for b in r]} for r in circuit.qregs
+        ],
+        "cregs": [
+            {"name": r.name, "bits": [circuit.find_bit(b).index for b in r]} for r in circuit.cregs
+        ],
         "operations": [],
     }
     for instruction in circuit.data:
@@ -65,35 +75,62 @@ def export_circuit(circuit) -> dict:
                 raise UnsupportedCircuit("Only bit/register equality conditions are supported")
             bits, value = condition
             bits = [bits] if isinstance(bits, Clbit) else list(bits)
-            desc.update(kind="if_else", condition={"bits": [circuit.find_bit(b).index for b in bits], "value": int(value)},
-                        blocks=[export_circuit(block) for block in op.blocks])
+            desc.update(
+                kind="if_else",
+                condition={"bits": [circuit.find_bit(b).index for b in bits], "value": int(value)},
+                blocks=[export_circuit(block) for block in op.blocks],
+            )
         elif isinstance(op, PauliEvolutionGate):
             operators = op.operator if isinstance(op.operator, list) else [op.operator]
             groups = []
             for operator in operators:
                 if not hasattr(operator, "to_list"):
                     from qiskit.quantum_info import SparsePauliOp
+
                     operator = SparsePauliOp.from_sparse_observable(operator)
-                groups.append([[p, number(complex(c).real), number(complex(c).imag)] for p, c in operator.to_list()])
+                groups.append(
+                    [
+                        [p, number(complex(c).real), number(complex(c).imag)]
+                        for p, c in operator.to_list()
+                    ]
+                )
             synthesis = op.synthesis
             if type(synthesis).__name__ not in {"LieTrotter", "SuzukiTrotter"}:
                 raise UnsupportedCircuit("Unknown Pauli evolution synthesis policy")
             settings = dict(synthesis.settings)
             if settings.get("atomic_evolution") is not None:
                 raise UnsupportedCircuit("Custom evolution callback cannot be frozen")
-            desc.update(kind="pauli_evolution", groups=groups, grouped=isinstance(op.operator, list),
-                        params=[number(op.time)], synthesis={"class": type(synthesis).__name__, "settings": settings})
+            desc.update(
+                kind="pauli_evolution",
+                groups=groups,
+                grouped=isinstance(op.operator, list),
+                params=[number(op.time)],
+                synthesis={"class": type(synthesis).__name__, "settings": settings},
+            )
         elif isinstance(op, UnitaryGate):
-            desc.update(kind="unitary", matrix=[[[number(complex(v).real), number(complex(v).imag)] for v in row] for row in op.to_matrix()])
+            desc.update(
+                kind="unitary",
+                matrix=[
+                    [[number(complex(v).real), number(complex(v).imag)] for v in row]
+                    for row in op.to_matrix()
+                ],
+            )
         elif op.name == "barrier":
             desc["kind"] = "barrier"
         elif op.name == "delay":
             desc.update(kind="delay", params=[number(op.duration)], unit=op.unit)
-        elif (op.name in standard and op.base_class is standard[op.name].base_class
-              and not (isinstance(op, ControlledGate) and op.ctrl_state != 2 ** op.num_ctrl_qubits - 1)):
+        elif (
+            op.name in standard
+            and op.base_class is standard[op.name].base_class
+            and not (isinstance(op, ControlledGate) and op.ctrl_state != 2**op.num_ctrl_qubits - 1)
+        ):
             desc.update(kind="standard", params=[number(p) for p in op.params])
         elif op.definition is not None:
-            desc.update(kind="definition", params=[number(p) for p in op.params], definition=export_circuit(op.definition))
+            desc.update(
+                kind="definition",
+                params=[number(p) for p in op.params],
+                definition=export_circuit(op.definition),
+            )
         else:
             raise UnsupportedCircuit(f"Unknown opaque operation {type(op).__name__}: {op.name}")
         output["operations"].append(desc)
@@ -103,9 +140,22 @@ def export_circuit(circuit) -> dict:
 
 def import_circuit(data: dict):
     from qiskit import QuantumCircuit
-    from qiskit.circuit import Qubit, Clbit, QuantumRegister, ClassicalRegister, Gate, Instruction, Barrier, Delay
+    from qiskit.circuit import (
+        Qubit,
+        Clbit,
+        QuantumRegister,
+        ClassicalRegister,
+        Gate,
+        Instruction,
+        Barrier,
+        Delay,
+    )
     from qiskit.circuit.controlflow import IfElseOp
-    from qiskit.circuit.library import PauliEvolutionGate, UnitaryGate, get_standard_gate_name_mapping
+    from qiskit.circuit.library import (
+        PauliEvolutionGate,
+        UnitaryGate,
+        get_standard_gate_name_mapping,
+    )
     from qiskit.quantum_info import SparsePauliOp
     from qiskit.synthesis import LieTrotter, SuzukiTrotter
 
@@ -115,9 +165,14 @@ def import_circuit(data: dict):
     circuit = QuantumCircuit()
     circuit.add_bits([Qubit() for _ in range(data["num_qubits"])])
     circuit.add_bits([Clbit() for _ in range(data["num_clbits"])])
-    for field, cls, bits in (("qregs", QuantumRegister, circuit.qubits), ("cregs", ClassicalRegister, circuit.clbits)):
+    for field, cls, bits in (
+        ("qregs", QuantumRegister, circuit.qubits),
+        ("cregs", ClassicalRegister, circuit.clbits),
+    ):
         for register in data.get(field, []):
-            circuit.add_register(cls(name=register["name"], bits=[bits[i] for i in register["bits"]]))
+            circuit.add_register(
+                cls(name=register["name"], bits=[bits[i] for i in register["bits"]])
+            )
     circuit.global_phase = numeric(data.get("global_phase", 0))
     standard = get_standard_gate_name_mapping()
     for spec in data["operations"]:
@@ -135,24 +190,35 @@ def import_circuit(data: dict):
         elif kind == "unitary":
             op = UnitaryGate([[complex(*v) for v in row] for row in spec["matrix"]])
         elif kind == "pauli_evolution":
-            groups = [SparsePauliOp.from_list([(p, complex(r, i)) for p, r, i in group]) for group in spec["groups"]]
+            groups = [
+                SparsePauliOp.from_list([(p, complex(r, i)) for p, r, i in group])
+                for group in spec["groups"]
+            ]
             synth = spec["synthesis"]
             cls = {"LieTrotter": LieTrotter, "SuzukiTrotter": SuzukiTrotter}.get(synth["class"])
             if cls is None:
                 raise UnsupportedCircuit("Unknown evolution synthesis")
-            op = PauliEvolutionGate(groups if spec["grouped"] else groups[0], time=params[0], synthesis=cls(**synth["settings"]))
+            op = PauliEvolutionGate(
+                groups if spec["grouped"] else groups[0],
+                time=params[0],
+                synthesis=cls(**synth["settings"]),
+            )
         elif kind == "if_else":
             condition = spec["condition"]
             indices = condition["bits"]
             if len(indices) == 1:
                 lhs = circuit.clbits[indices[0]]
             else:
-                matches = [r for r in circuit.cregs if [circuit.find_bit(c).index for c in r] == indices]
+                matches = [
+                    r for r in circuit.cregs if [circuit.find_bit(c).index for c in r] == indices
+                ]
                 if len(matches) != 1:
                     raise UnsupportedCircuit("Condition register is not represented exactly")
                 lhs = matches[0]
             blocks = [import_circuit(block) for block in spec["blocks"]]
-            op = IfElseOp((lhs, condition["value"]), blocks[0], blocks[1] if len(blocks) == 2 else None)
+            op = IfElseOp(
+                (lhs, condition["value"]), blocks[0], blocks[1] if len(blocks) == 2 else None
+            )
         elif kind == "definition":
             cls = Instruction if spec["cargs"] else Gate
             args = [name, len(spec["qargs"])]

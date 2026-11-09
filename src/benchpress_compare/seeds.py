@@ -67,5 +67,8 @@ def seed_contract(master_seed: int = DEFAULT_MASTER_SEED) -> dict:
         "schema_version": 1,
         "algorithm": SEED_ALGORITHM,
         "master_seed": master_seed,
-        "ranges": {phase: {"lower": bounds[0], "upper_exclusive": bounds[1]} for phase, bounds in SEED_RANGES.items()},
+        "ranges": {
+            phase: {"lower": bounds[0], "upper_exclusive": bounds[1]}
+            for phase, bounds in SEED_RANGES.items()
+        },
     }

@@ -12,10 +12,17 @@ from .weights import fraction_record, read_fraction
 AGGREGATION_PROTOCOL = "ratio-of-arithmetic-means-geometric-v1"
 METRICS = ("N2", "D2")
 _FILTERS = {
-    "circuit": "input_id", "input_id": "input_id",
-    "target": "target_class", "target_class": "target_class",
-    "target_id": "target_id", "target_snapshot": "target_id", "target_hash": "target_hash",
-    "level": "level", "family": "family", "band": "band", "recipe": "recipe",
+    "circuit": "input_id",
+    "input_id": "input_id",
+    "target": "target_class",
+    "target_class": "target_class",
+    "target_id": "target_id",
+    "target_snapshot": "target_id",
+    "target_hash": "target_hash",
+    "level": "level",
+    "family": "family",
+    "band": "band",
+    "recipe": "recipe",
 }
 _SUCCESS = {"SUCCEEDED", "SUCCESS", "COMPLETE"}
 
@@ -49,7 +56,11 @@ def normalize_query(query: Mapping | None = None) -> dict[str, list]:
 def select_cases(cases: Iterable[dict], query: Mapping | None = None) -> list[dict]:
     normalized = normalize_query(query)
     return sorted(
-        (case for case in cases if all(case.get(field) in values for field, values in normalized.items())),
+        (
+            case
+            for case in cases
+            if all(case.get(field) in values for field, values in normalized.items())
+        ),
         key=lambda case: case["case_id"],
     )
 
@@ -93,7 +104,12 @@ def _spread(values: list[int]) -> dict:
         return {"min": None, "max": None, "range": None, "population_stddev": None}
     mean = Fraction(sum(values), len(values))
     variance = sum(((Fraction(value) - mean) ** 2 for value in values), Fraction()) / len(values)
-    return {"min": min(values), "max": max(values), "range": max(values) - min(values), "population_stddev": math.sqrt(float(variance))}
+    return {
+        "min": min(values),
+        "max": max(values),
+        "range": max(values) - min(values),
+        "population_stddev": math.sqrt(float(variance)),
+    }
 
 
 def _case_metric(case: dict, index: dict, metric: str) -> dict:
@@ -146,7 +162,10 @@ def _case_metric(case: dict, index: dict, metric: str) -> dict:
 
 def _geometric(ratios: list[tuple[Fraction, Fraction]]) -> float:
     weight = sum((item[1] for item in ratios), Fraction())
-    logscore = math.fsum(float(w / weight) * (math.log(ratio.numerator) - math.log(ratio.denominator)) for ratio, w in ratios)
+    logscore = math.fsum(
+        float(w / weight) * (math.log(ratio.numerator) - math.log(ratio.denominator))
+        for ratio, w in ratios
+    )
     try:
         score = math.exp(logscore)
     except OverflowError as exc:
@@ -175,7 +194,11 @@ def aggregate(
         raise AggregationError("duplicate planned case identity")
     for case in cases:
         seeds = case.get("seeds", [])
-        if not seeds or len(set(seeds)) != len(seeds) or any(type(seed) is not int or seed < 0 for seed in seeds):
+        if (
+            not seeds
+            or len(set(seeds)) != len(seeds)
+            or any(type(seed) is not int or seed < 0 for seed in seeds)
+        ):
             raise AggregationError(f"invalid seed list for {case['case_id']}")
         if read_fraction(case[weight_field]) < 0:
             raise AggregationError("negative planned weight")
@@ -188,7 +211,22 @@ def aggregate(
     supplemental = []
     circuit_cases = defaultdict(list)
     for case in selected:
-        row = {field: case.get(field) for field in ("case_id", "input_id", "target_class", "target_id", "level", "family", "band", "recipe", "active_width", "declared_width", "occupancy")}
+        row = {
+            field: case.get(field)
+            for field in (
+                "case_id",
+                "input_id",
+                "target_class",
+                "target_id",
+                "level",
+                "family",
+                "band",
+                "recipe",
+                "active_width",
+                "declared_width",
+                "occupancy",
+            )
+        }
         row["weight"] = fraction_record(read_fraction(case[weight_field]))
         row["metrics"] = {metric: _case_metric(case, index, metric) for metric in METRICS}
         if read_fraction(case[weight_field]) > 0:
@@ -200,12 +238,17 @@ def aggregate(
         if len({read_fraction(row["weight"]) for row in group}) != 1:
             raise AggregationError(f"unequal selected case weights for circuit {input_id}")
     metrics = {}
-    circuit_details = {key: {"input_id": key, "case_count": len(group), "metrics": {}} for key, group in sorted(circuit_cases.items())}
+    circuit_details = {
+        key: {"input_id": key, "case_count": len(group), "metrics": {}}
+        for key, group in sorted(circuit_cases.items())
+    }
     for metric in METRICS:
         counts = Counter({key: 0 for key in ("better", "same", "worse", "unclassifiable")})
         circuit_reasons = Counter()
         for input_id, group in circuit_cases.items():
-            reasons = sorted({reason for row in group for reason in row["metrics"][metric]["reasons"]})
+            reasons = sorted(
+                {reason for row in group for reason in row["metrics"][metric]["reasons"]}
+            )
             product = Fraction(1)
             score = None
             if reasons:
@@ -215,10 +258,20 @@ def aggregate(
                 for row in group:
                     product *= read_fraction(row["metrics"][metric]["ratio"])
                 classification = "better" if product < 1 else "worse" if product > 1 else "same"
-                score = _geometric([(read_fraction(row["metrics"][metric]["ratio"]), read_fraction(row["weight"])) for row in group])
+                score = _geometric(
+                    [
+                        (
+                            read_fraction(row["metrics"][metric]["ratio"]),
+                            read_fraction(row["weight"]),
+                        )
+                        for row in group
+                    ]
+                )
             counts[classification] += 1
             circuit_details[input_id]["metrics"][metric] = {
-                "classification": classification, "reasons": reasons, "score": score,
+                "classification": classification,
+                "reasons": reasons,
+                "score": score,
                 "exact_ratio_product": fraction_record(product) if not reasons else None,
             }
         bad = [row for row in details if not row["metrics"][metric]["available"]]
@@ -227,8 +280,20 @@ def aggregate(
             reasons["empty_slice"] += 1
         score = None
         if details and not bad:
-            score = _geometric([(read_fraction(row["metrics"][metric]["ratio"]), read_fraction(row["weight"])) for row in details])
-        available_weight = sum((read_fraction(row["weight"]) for row in details if row["metrics"][metric]["available"]), Fraction())
+            score = _geometric(
+                [
+                    (read_fraction(row["metrics"][metric]["ratio"]), read_fraction(row["weight"]))
+                    for row in details
+                ]
+            )
+        available_weight = sum(
+            (
+                read_fraction(row["weight"])
+                for row in details
+                if row["metrics"][metric]["available"]
+            ),
+            Fraction(),
+        )
         metrics[metric] = {
             "available": score is not None,
             "score": score,
@@ -238,10 +303,17 @@ def aggregate(
             "unclassifiable_circuit_reasons": dict(sorted(circuit_reasons.items())),
             "available_cases": len(details) - len(bad),
             "available_weight": fraction_record(available_weight),
-            "usable_observations": sum(row["metrics"][metric]["usable_observations"] for row in details),
+            "usable_observations": sum(
+                row["metrics"][metric]["usable_observations"] for row in details
+            ),
             "integrity_errors": sum(row["metrics"][metric]["integrity_error"] for row in details),
         }
-    expected_keys = {(case["case_id"], arm, seed) for case in weighted for arm in ("baseline", "evolve") for seed in case["seeds"]}
+    expected_keys = {
+        (case["case_id"], arm, seed)
+        for case in weighted
+        for arm in ("baseline", "evolve")
+        for seed in case["seeds"]
+    }
     observed = [index[key] for key in expected_keys if key in index]
     return {
         "schema_version": 1,
@@ -253,8 +325,12 @@ def aggregate(
         "expected_cases": len(weighted),
         "expected_observations": len(expected_keys),
         "received_observations": len(observed),
-        "successful_observations": sum(str(item.get("status", "")).upper() in _SUCCESS for item in observed),
-        "failed_observations": sum(str(item.get("status", "")).upper() not in _SUCCESS for item in observed),
+        "successful_observations": sum(
+            str(item.get("status", "")).upper() in _SUCCESS for item in observed
+        ),
+        "failed_observations": sum(
+            str(item.get("status", "")).upper() not in _SUCCESS for item in observed
+        ),
         "cache_hits": sum(bool(item.get("cache_hit")) for item in observed),
         "metrics": metrics,
         "cases": details,

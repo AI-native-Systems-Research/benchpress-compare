@@ -1,9 +1,18 @@
 import pytest
 
-from benchpress_compare.targets import heavy_hex_distance, square_edges, synthetic_target, import_target, freeze_fake_torino
+from benchpress_compare.targets import (
+    heavy_hex_distance,
+    square_edges,
+    synthetic_target,
+    import_target,
+    freeze_fake_torino,
+)
 
 
-@pytest.mark.parametrize("width,distance", [(1, 1), (2, 3), (19, 3), (20, 5), (57, 5), (58, 7), (115, 7), (116, 9), (193, 9), (194, 11)])
+@pytest.mark.parametrize(
+    "width,distance",
+    [(1, 1), (2, 3), (19, 3), (20, 5), (57, 5), (58, 7), (115, 7), (116, 9), (193, 9), (194, 11)],
+)
 def test_complete_heavy_hex_capacity_boundaries(width, distance):
     assert heavy_hex_distance(width) == distance
 

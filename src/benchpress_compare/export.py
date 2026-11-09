@@ -69,7 +69,10 @@ def _add_verified_tree(archive, root, mappings, excluded):
         member = archive.gettarinfo(str(path), arcname=archive_name)
         if member.issym():
             target = path.resolve(strict=True)
-            if any(target == excluded_path or target.is_relative_to(excluded_path) for excluded_path in excluded):
+            if any(
+                target == excluded_path or target.is_relative_to(excluded_path)
+                for excluded_path in excluded
+            ):
                 raise IntegrityError(f"Archive link depends on an excluded environment: {path}")
             target_name = _archive_name(target, mappings)
             member.linkname = os.path.relpath(target_name, str(PurePosixPath(archive_name).parent))
@@ -134,7 +137,10 @@ def export_run(root, output):
                 elif not build.is_relative_to(root):
                     raise IntegrityError("Evolved build lies outside the comparison")
         # Every accepted result is checked, including preparation and pilot data.
-        for parent in [root / "observations", *(root / phase / "observations" for phase in ("tasks", "preflight", "pilot"))]:
+        for parent in [
+            root / "observations",
+            *(root / phase / "observations" for phase in ("tasks", "preflight", "pilot")),
+        ]:
             for directory in sorted(parent.glob("*")):
                 if not directory.is_dir() or directory.name.startswith("."):
                     continue
@@ -156,11 +162,18 @@ def export_run(root, output):
         try:
             with tempfile.TemporaryDirectory(dir=output.parent) as meta:
                 metadata_path = Path(meta) / "export.json"
-                atomic_write_json(metadata_path, {
-                    "schema_version": 1, "source_results": str(root), "references": references,
-                    "excluded_environments": sorted(str(path) for path in excluded if path.name == "env"),
-                    "environment_relocation": "recreate from included wheels and dependency lock; virtualenvs contain nonrelocatable interpreter links",
-                })
+                atomic_write_json(
+                    metadata_path,
+                    {
+                        "schema_version": 1,
+                        "source_results": str(root),
+                        "references": references,
+                        "excluded_environments": sorted(
+                            str(path) for path in excluded if path.name == "env"
+                        ),
+                        "environment_relocation": "recreate from included wheels and dependency lock; virtualenvs contain nonrelocatable interpreter links",
+                    },
+                )
                 with tarfile.open(temporary, "w", dereference=False) as archive:
                     for source in mappings:
                         _add_verified_tree(archive, source, mappings, excluded)
@@ -173,5 +186,9 @@ def export_run(root, output):
             fsync_directory(output.parent)
         finally:
             Path(temporary).unlink(missing_ok=True)
-    return {"schema_version": 1, "path": str(output), "sha256": file_hash(output),
-            "store_references": len(references)}
+    return {
+        "schema_version": 1,
+        "path": str(output),
+        "sha256": file_hash(output),
+        "store_references": len(references),
+    }

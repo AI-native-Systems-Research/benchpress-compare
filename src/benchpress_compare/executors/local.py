@@ -16,13 +16,23 @@ from ..errors import ReconciliationError
 
 def worker_environment(profile: dict, scratch: Path) -> dict:
     scratch.mkdir(parents=True, exist_ok=True)
-    env = {name: os.environ[name] for name in ("PATH", "SYSTEMROOT", "LANG", "LC_ALL", "TZ")
-           if name in os.environ}
-    env.update({"PYTHONNOUSERSITE": "1", "PYTHONDONTWRITEBYTECODE": "1",
-                "HOME": str(scratch), "XDG_CACHE_HOME": str(scratch / "cache"),
-                "XDG_CONFIG_HOME": str(scratch / "config"), "TMPDIR": str(scratch),
-                "QISKIT_SETTINGS": str(scratch / "settings.conf"),
-                **profile.get("thread_environment", {})})
+    env = {
+        name: os.environ[name]
+        for name in ("PATH", "SYSTEMROOT", "LANG", "LC_ALL", "TZ")
+        if name in os.environ
+    }
+    env.update(
+        {
+            "PYTHONNOUSERSITE": "1",
+            "PYTHONDONTWRITEBYTECODE": "1",
+            "HOME": str(scratch),
+            "XDG_CACHE_HOME": str(scratch / "cache"),
+            "XDG_CONFIG_HOME": str(scratch / "config"),
+            "TMPDIR": str(scratch),
+            "QISKIT_SETTINGS": str(scratch / "settings.conf"),
+            **profile.get("thread_environment", {}),
+        }
+    )
     return env
 
 
@@ -31,7 +41,7 @@ def matching_process(job, *, include_zombie=False):
         return None
     try:
         process = psutil.Process(job["pid"])
-        if abs(process.create_time() - job["process_create_time"]) > .01:
+        if abs(process.create_time() - job["process_create_time"]) > 0.01:
             return None
         if not include_zombie and process.status() == psutil.STATUS_ZOMBIE:
             return None
@@ -54,8 +64,11 @@ def _process_tree(job):
                 if child.status() != psutil.STATUS_ZOMBIE:
                     processes[child.pid] = child
                 if child.pid != job.get("pid"):
-                    known[child.pid] = {"pid": child.pid, "process_create_time": child.create_time(),
-                                        "process_group": os.getpgid(child.pid)}
+                    known[child.pid] = {
+                        "pid": child.pid,
+                        "process_create_time": child.create_time(),
+                        "process_group": os.getpgid(child.pid),
+                    }
         except psutil.NoSuchProcess:
             continue
     job["descendants"] = sorted(known.values(), key=lambda item: item["pid"])
@@ -80,7 +93,9 @@ def terminate_group(job, *, grace_seconds=2):
             # an unrelated group after PID reuse merely because its id matches.
             zombie = matching_process(job, include_zombie=True)
             if zombie is None:
-                raise ReconciliationError("Worker group remains but its process identities cannot be verified")
+                raise ReconciliationError(
+                    "Worker group remains but its process identities cannot be verified"
+                )
         return
     identities = {process.pid: process.create_time() for process in processes}
     groups = set()
@@ -100,7 +115,7 @@ def terminate_group(job, *, grace_seconds=2):
             pass
     deadline = time.monotonic() + grace_seconds
     while time.monotonic() < deadline and _process_tree(job):
-        time.sleep(.05)
+        time.sleep(0.05)
     # Re-check PID/create-time pairs before final escalation, including children
     # that entered their own sessions and a group whose original leader exited.
     for process in _process_tree(job):
@@ -118,16 +133,31 @@ class LocalExecutor:
     def submit(self, command, attempt_dir, profile, *, name, token):
         attempt_dir = Path(attempt_dir).resolve()
         attempt_dir.mkdir(parents=True, exist_ok=True)
-        record = {"schema_version": 1, "executor": "local", "name": name, "token": token,
-                  "status": "SUBMITTING", "submitted_at": time.time(),
-                  "attempt_dir": str(attempt_dir), "runtime_profile": profile,
-                  "peak_rss_bytes": 0}
+        record = {
+            "schema_version": 1,
+            "executor": "local",
+            "name": name,
+            "token": token,
+            "status": "SUBMITTING",
+            "submitted_at": time.time(),
+            "attempt_dir": str(attempt_dir),
+            "runtime_profile": profile,
+            "peak_rss_bytes": 0,
+        }
         atomic_write_json(attempt_dir / "job.json", record)
         try:
-            with (attempt_dir / "stdout.log").open("ab") as out, (attempt_dir / "stderr.log").open("ab") as err:
-                process = subprocess.Popen(command, cwd=attempt_dir, stdout=out, stderr=err,
-                                           env=worker_environment(profile, attempt_dir / "scratch"),
-                                           start_new_session=True)
+            with (
+                (attempt_dir / "stdout.log").open("ab") as out,
+                (attempt_dir / "stderr.log").open("ab") as err,
+            ):
+                process = subprocess.Popen(
+                    command,
+                    cwd=attempt_dir,
+                    stdout=out,
+                    stderr=err,
+                    env=worker_environment(profile, attempt_dir / "scratch"),
+                    start_new_session=True,
+                )
         except OSError as exc:
             record.update(status="INFRA_FAILED", reason=str(exc))
             atomic_write_json(attempt_dir / "job.json", record)
@@ -158,21 +188,36 @@ class LocalExecutor:
             if job["status"] in {"SUBMITTING", "SUBMISSION_UNKNOWN"} and not job.get("pid"):
                 return {**job, "status": "SUBMISSION_UNKNOWN"}
             if matching_process(job, include_zombie=True) is None and _group_exists(job.get("pid")):
-                return {**job, "status": "NEEDS_RECONCILIATION", "reason": "unverified_surviving_process_group"}
-            return {**job, "status": "DONE" if return_code in {0, None} else "EXIT",
-                    "return_code": return_code,
-                    "elapsed_seconds": max(.000001, time.time() - job["submitted_at"])}
+                return {
+                    **job,
+                    "status": "NEEDS_RECONCILIATION",
+                    "reason": "unverified_surviving_process_group",
+                }
+            return {
+                **job,
+                "status": "DONE" if return_code in {0, None} else "EXIT",
+                "return_code": return_code,
+                "elapsed_seconds": max(0.000001, time.time() - job["submitted_at"]),
+            }
         try:
             rss = sum(p.memory_info().rss for p in processes if p.is_running())
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             rss = job["peak_rss_bytes"]
         job["peak_rss_bytes"] = max(job["peak_rss_bytes"], rss)
-        elapsed = (time.monotonic() - self.started[token] if token in self.started else
-                   max(0, time.time() - job["submitted_at"]))
+        elapsed = (
+            time.monotonic() - self.started[token]
+            if token in self.started
+            else max(0, time.time() - job["submitted_at"])
+        )
         job["elapsed_seconds"] = elapsed
         profile = job["runtime_profile"]
-        reason = ("wall_limit" if elapsed > profile["wall_seconds"] else
-                  "memory_limit" if rss > profile["memory_bytes"] else None)
+        reason = (
+            "wall_limit"
+            if elapsed > profile["wall_seconds"]
+            else "memory_limit"
+            if rss > profile["memory_bytes"]
+            else None
+        )
         if reason:
             terminate_group(job)
             job.update(status="RESOURCE_LIMIT", reason=reason)

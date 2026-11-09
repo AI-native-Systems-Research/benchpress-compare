@@ -13,8 +13,14 @@ def test_types_and_mapping_order():
 
 
 def test_observation_reuse_is_independent_of_cohort_and_attempt():
-    spec = dict(case_id="c", build_id="b", phase="comparison", seed=3,
-                runtime_profile={"native_threads": 1}, protocols={"metric": "v1"})
+    spec = dict(
+        case_id="c",
+        build_id="b",
+        phase="comparison",
+        seed=3,
+        runtime_profile={"native_threads": 1},
+        protocols={"metric": "v1"},
+    )
     key = observation_identity(spec)
     assert observation_identity(dict(spec, arm="evolve", attempt_id="retry", weight=0)) == key
     assert observation_identity(dict(spec, phase="pilot")) != key

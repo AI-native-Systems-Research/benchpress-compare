@@ -20,23 +20,28 @@ def wait_until(predicate, seconds=5):
     while time.monotonic() < deadline:
         if predicate():
             return
-        time.sleep(.01)
+        time.sleep(0.01)
     raise AssertionError("process state did not settle")
 
 
 def launch_tree(tmp_path):
     script = tmp_path / "worker.py"
-    script.write_text('''
+    script.write_text("""
 import json, pathlib, subprocess, sys, time
 child = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], start_new_session=True)
 pathlib.Path("child.json").write_text(json.dumps({"pid": child.pid}))
 while not pathlib.Path("exit-parent").exists():
     time.sleep(0.01)
-''')
+""")
     executor = LocalExecutor()
     directory = tmp_path / "attempt"
-    job = executor.submit([sys.executable, str(script)], directory,
-                          runtime_profile(memory_gb=.125, wall_seconds=10), name="test", token="owned-token")
+    job = executor.submit(
+        [sys.executable, str(script)],
+        directory,
+        runtime_profile(memory_gb=0.125, wall_seconds=10),
+        name="test",
+        token="owned-token",
+    )
     wait_until(lambda: (directory / "child.json").exists())
     child_pid = json.loads((directory / "child.json").read_text())["pid"]
     job = executor.poll(job)
