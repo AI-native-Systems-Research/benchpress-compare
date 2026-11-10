@@ -18,7 +18,7 @@ from benchpress_compare.store import Lease
 
 
 WORKER = r"""
-import hashlib, json, os, pathlib, time
+import hashlib, json, os, pathlib, signal, time
 spec = json.loads(pathlib.Path("spec.json").read_text())
 counter = pathlib.Path(spec["counter_path"])
 old = counter.read_text().splitlines() if counter.exists() else []
@@ -33,6 +33,11 @@ statuses = spec.get("fake_outcomes", ["SUCCEEDED"])
 status = statuses[min(iteration, len(statuses)-1)]
 if status == "NO_RECEIPT":
     raise SystemExit(1)
+if status == "SIGKILL":
+    os.kill(os.getpid(), signal.SIGKILL)
+if status == "STOP_SHARD":
+    os.kill(os.getppid(), signal.SIGTERM)
+    time.sleep(10)
 if status == "MALFORMED":
     pathlib.Path("receipt.json").write_text("not-json")
     raise SystemExit(0)
@@ -213,10 +218,12 @@ def test_unknown_local_submission_is_reconciled_without_duplicate(setup):
 class FakeLSF:
     """Scheduler transport that runs real fresh worker subprocesses."""
 
-    def __init__(self, *, lose_submission=False):
+    def __init__(self, *, lose_submission=False, terminations=None):
         self.jobs = {}
         self.submissions = 0
         self.lose_submission = lose_submission
+        # Process exit code -> scheduler exit reason reported for that job.
+        self.terminations = terminations or {}
 
     def __call__(self, argv, **kwargs):
         if argv[0] == "bsub":
@@ -241,13 +248,14 @@ class FakeLSF:
             records = []
             for identity, job in self.jobs.items():
                 code = job["process"].poll()
-                records.append(
-                    {
-                        "JOBID": identity,
-                        "STAT": "RUN" if code is None else "DONE" if code == 0 else "EXIT",
-                        "JOB_NAME": job["name"],
-                    }
-                )
+                record = {
+                    "JOBID": identity,
+                    "STAT": "RUN" if code is None else "DONE" if code == 0 else "EXIT",
+                    "JOB_NAME": job["name"],
+                }
+                if code is not None and code in self.terminations:
+                    record.update(STAT="EXIT", EXIT_REASON=self.terminations[code])
+                records.append(record)
             return subprocess.CompletedProcess(argv, 0, json.dumps({"RECORDS": records}), "")
         raise AssertionError(argv)
 
@@ -356,6 +364,82 @@ def test_unexplained_missing_receipt_does_not_resample_compiler(setup):
         execute(root, config, [spec])
     assert len(list((root / "attempts" / work_key(spec)).glob("*/attempt.json"))) == 1
     assert read_results(root)[0]["status"] == "HARNESS_FAILED"
+
+
+def test_external_kill_without_receipt_is_retried_once_as_infrastructure(setup):
+    root, config, spec = setup(fake_outcomes=["SIGKILL", "SUCCEEDED"])
+    rows = execute(root, config, [spec])
+    assert rows[0]["status"] == "SUCCEEDED"
+    attempts = sorted(
+        (read_json(path) for path in (root / "attempts" / work_key(spec)).glob("*/attempt.json")),
+        key=lambda attempt: attempt["created_at"],
+    )
+    assert [attempt["status"] for attempt in attempts] == ["INFRA_FAILED", "SUCCEEDED"]
+    assert attempts[0]["job"]["return_code"] == -9
+    exhausted, config2, killed = setup(run="killed", identity="killed", fake_outcomes=["SIGKILL"])
+    row = execute(exhausted, config2, [killed])[0]
+    assert (row["status"], row["reason"]) == ("INFRA_FAILED", "external_signal")
+    assert len(list((exhausted / "attempts" / work_key(killed)).glob("*/attempt.json"))) == 2
+
+
+def test_scheduler_memory_kill_is_a_resource_limit_and_siblings_keep_receipts(setup, tmp_path):
+    root, config, baseline = setup(fake_outcomes=["SIGKILL"])
+    _, _, evolve = setup(arm="evolve")
+    site = SiteConfig(queue="fake", poll_seconds=0.01, visibility_grace_seconds=0.1)
+    site_path = tmp_path / "site.toml"
+    site_path.write_text('[lsf]\nqueue="fake"\npoll_seconds=0.01\nvisibility_grace_seconds=0.1\n')
+    config.executor, config.lsf_config = "lsf", str(site_path)
+    # The shard itself finishes, yet the scheduler reports the job as killed for
+    # its memory limit, exactly as cgroup enforcement does on LSF.
+    scheduler = FakeLSF(
+        terminations={0: "TERM_MEMLIMIT: job killed after reaching LSF memory usage limit"}
+    )
+    bundle = {"bundle_id": "oom", "observations": [baseline, evolve], "estimated_seconds": 12}
+    rows = execute(
+        root,
+        config,
+        [baseline, evolve],
+        bundles=[bundle],
+        executor=LSFExecutor(site, runner=scheduler),
+    )
+    assert (rows[0]["status"], rows[0]["reason"]) == ("RESOURCE_LIMIT", "memory_limit")
+    assert rows[1]["status"] == "SUCCEEDED"
+    assert scheduler.submissions == 1
+    assert len(list((root / "attempts" / work_key(baseline)).glob("*/attempt.json"))) == 1
+    assert read_results(root) == execute(
+        root, config, [baseline, evolve], bundles=[bundle], executor=LSFExecutor(site, scheduler)
+    )
+
+
+def test_scheduler_kill_retries_children_the_shard_never_reached(setup, tmp_path):
+    root, config, baseline = setup(fake_outcomes=["STOP_SHARD"])
+    _, _, evolve = setup(arm="evolve")
+    site = SiteConfig(queue="fake", poll_seconds=0.01, visibility_grace_seconds=0.1)
+    site_path = tmp_path / "site.toml"
+    site_path.write_text('[lsf]\nqueue="fake"\npoll_seconds=0.01\nvisibility_grace_seconds=0.1\n')
+    config.executor, config.lsf_config = "lsf", str(site_path)
+    # The first child's SIGTERM to the shard stands in for the scheduler ending
+    # the job; the shard exits 3 after cancelling it and skipping the second.
+    scheduler = FakeLSF(
+        terminations={3: "TERM_RUNLIMIT: job killed after reaching LSF run time limit"}
+    )
+    bundle = {"bundle_id": "cut", "observations": [baseline, evolve], "estimated_seconds": 12}
+    rows = execute(
+        root,
+        config,
+        [baseline, evolve],
+        bundles=[bundle],
+        executor=LSFExecutor(site, runner=scheduler),
+    )
+    assert (rows[0]["status"], rows[0]["reason"]) == ("RESOURCE_LIMIT", "wall_limit")
+    assert rows[1]["status"] == "SUCCEEDED"
+    assert scheduler.submissions == 2
+    assert len(list((root / "attempts" / work_key(baseline)).glob("*/attempt.json"))) == 1
+    attempts = sorted(
+        (read_json(path) for path in (root / "attempts" / work_key(evolve)).glob("*/attempt.json")),
+        key=lambda attempt: attempt["created_at"],
+    )
+    assert [attempt["status"] for attempt in attempts] == ["INFRA_FAILED", "SUCCEEDED"]
 
 
 def test_confirmed_launch_failure_keeps_infrastructure_classification(setup):

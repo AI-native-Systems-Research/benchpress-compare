@@ -180,15 +180,23 @@ observation:
      which execute children one after another, each in a fresh subprocess with its
      own receipt. Dispatch respects the site's `max_jobs`, `max_cpus` and
      `max_memory_gb`; with 32 GB per job and a 2,000 GB cap, at most 62 jobs run
-     at once.
+     at once. Each job asks the scheduler for the worker budget plus
+     `memory_headroom_gb`, so the shard's own watchdog enforces the frozen
+     budget and the scheduler limit is only a backstop.
 4. **Commit**: the receipt's identity fields and artifact hashes are checked
    against the spec. The result is then published atomically as an immutable
    bundle under `observations/`. Successful, verified baseline results are also
    published to the shared store for reuse by later runs.
 5. **Failures**:
-   - Infrastructure failures are retried up to `--infrastructure-retries`.
+   - Infrastructure failures are retried up to `--infrastructure-retries`. A
+     worker killed from outside (SIGKILL, SIGTERM, a scheduler termination other
+     than its own limits) and a shard child the scheduler ended the job before
+     reaching count as infrastructure.
    - Compiler failures, invalid output, resource limits and harness failures are
-     terminal for that observation.
+     terminal for that observation. A scheduler kill for the job's memory or run
+     time limit (`TERM_MEMLIMIT`, `TERM_RUNLIMIT`) is a resource limit of the
+     child that was running. A worker that exits by itself without a receipt is
+     a harness failure, and that stops the run.
    - Uncertain scheduler state moves the run to **NEEDS_RECONCILIATION**; the
      harness never speculatively resubmits.
 

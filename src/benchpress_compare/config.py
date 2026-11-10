@@ -152,6 +152,12 @@ class SiteConfig:
     memory_limit_unit: str | None = None
     memory_reservation_unit: str | None = None
     memory_per_slot: bool = False
+    # Added to each worker job's -M limit and rusage[mem=] reservation on top
+    # of the frozen memory_bytes budget. The scheduler's cgroup also counts the
+    # shard supervisor and page cache and samples continuously, so without
+    # headroom it kills a worker before the in-job watchdog can enforce the
+    # budget and report RESOURCE_LIMIT.
+    memory_headroom_gb: float = 1.0
     controller_cpus: int = 1
     controller_memory_gb: float = 4
     build_cpus: int = 4
@@ -178,6 +184,8 @@ class SiteConfig:
                 raise CompareError("LSF memory limit/reservation units must be KB, MB, or GB")
         for key, value in asdict(cfg).items():
             if isinstance(value, (int, float)) and not isinstance(value, bool):
-                if not math.isfinite(value) or value <= 0:
-                    raise CompareError(f"LSF {key} must be finite and positive")
+                zero_ok = key == "memory_headroom_gb"
+                if not math.isfinite(value) or value < 0 or (value == 0 and not zero_ok):
+                    bound = "non-negative" if zero_ok else "positive"
+                    raise CompareError(f"LSF {key} must be finite and {bound}")
         return cfg

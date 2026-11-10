@@ -14,6 +14,10 @@ shard_max_observations = 6
 
 memory_unit = "GB"
 memory_per_slot = false
+# LSB_RESOURCE_ENFORCE="cpu memory gpu" on this site: the cgroup limit counts
+# the shard supervisor and page cache alongside the worker, so the job limit
+# must sit above the frozen worker budget for the in-job watchdog to act first.
+memory_headroom_gb = 1
 
 controller_cpus = 1
 controller_memory_gb = 8

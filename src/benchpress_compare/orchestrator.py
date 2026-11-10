@@ -594,9 +594,18 @@ class ExecutionEngine:
                         job.update(supervisor["resources"])
                         job["return_code"] = supervisor.get("return_code")
                         attempt["job"] = job
+                    # A scheduler that enforced the job's limits explains only the
+                    # child running at the time: siblings keep their receipts and
+                    # the ones the shard never reached are infrastructure casualties.
+                    termination = job.get("termination")
+                    limit = job.get("reason") if termination else None
+                    started = (
+                        supervisor["resources"].get("elapsed_seconds", 0) > 0
+                        if supervisor is not None
+                        else (Path(attempt["directory"]) / "job.json").exists()
+                    )
                     if supervisor and supervisor["status"] in {
                         "RESOURCE_LIMIT",
-                        "CANCELLED",
                         "INFRA_FAILED",
                         "HARNESS_FAILED",
                     }:
@@ -645,12 +654,32 @@ class ExecutionEngine:
                         result = self._failed_result(
                             spec, attempt, "COMPILER_FAILED", "native_crash"
                         )
+                    elif limit and started:
+                        result = self._failed_result(spec, attempt, "RESOURCE_LIMIT", limit)
                     elif job["status"] == "INFRA_FAILED":
                         result = self._failed_result(
                             spec,
                             attempt,
                             "INFRA_FAILED",
                             job.get("reason", "confirmed_infrastructure_failure"),
+                        )
+                    elif not started:
+                        result = self._failed_result(
+                            spec, attempt, "INFRA_FAILED", "job_ended_before_start"
+                        )
+                    elif (
+                        termination
+                        or job.get("return_code") in {-9, -15}
+                        or (supervisor and supervisor["status"] == "CANCELLED")
+                    ):
+                        # SIGKILL, SIGTERM and scheduler terminations come from
+                        # outside the worker, so unlike a crash they say nothing
+                        # about the compiler; one infrastructure retry is safe.
+                        result = self._failed_result(
+                            spec,
+                            attempt,
+                            "INFRA_FAILED",
+                            (termination or "external_signal").lower(),
                         )
                     else:
                         # An unexplained process exit is not evidence of node

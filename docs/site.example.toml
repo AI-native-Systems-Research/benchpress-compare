@@ -26,6 +26,11 @@ memory_unit = "MB"
 # memory_limit_unit = "KB"
 # memory_reservation_unit = "MB"
 memory_per_slot = false
+# Added to each worker job's -M and rusage[mem=] on top of the frozen worker
+# memory budget. With cgroup enforcement (LSB_RESOURCE_ENFORCE=memory) the
+# scheduler counts the shard supervisor and page cache too, so without headroom
+# it kills a worker before the in-job watchdog can report RESOURCE_LIMIT.
+memory_headroom_gb = 1
 
 controller_cpus = 1
 controller_memory_gb = 4

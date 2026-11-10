@@ -18,6 +18,14 @@ from ..identity import atomic_write_json
 ACTIVE = {"PEND", "RUN", "PSUSP", "USUSP", "SSUSP", "WAIT", "PROV"}
 TERMINAL = {"DONE", "EXIT", "ZOMBI"}
 _NOT_FOUND = re.compile(r"not found|no matching job|no unfinished job", re.IGNORECASE)
+# Scheduler termination codes that enforce the job's own resource limits. Any
+# other TERM_* code is an external termination for the coordinator to classify.
+LIMIT_TERMINATIONS = {
+    "TERM_MEMLIMIT": "memory_limit",
+    "TERM_SWAP": "memory_limit",
+    "TERM_RUNLIMIT": "wall_limit",
+}
+_TERMINATION = re.compile(r"\bTERM_[A-Z_]+\b")
 
 
 def parse_jobs(output: str) -> list[dict]:
@@ -46,13 +54,15 @@ def parse_jobs(output: str) -> list[dict]:
             job_id, state = row.get("jobid", row.get("job_id")), row.get("stat", row.get("status"))
             if job_id is None or state not in ACTIVE | TERMINAL | {"UNKWN"}:
                 raise ValueError("Missing or unknown scheduler identity/state")
-            normalized.append(
-                {
-                    "job_id": str(job_id),
-                    "scheduler_state": state,
-                    "name": row.get("job_name", row.get("jobname", "")),
-                }
-            )
+            record = {
+                "job_id": str(job_id),
+                "scheduler_state": state,
+                "name": row.get("job_name", row.get("jobname", "")),
+            }
+            termination = _TERMINATION.search(str(row.get("exit_reason") or ""))
+            if termination:
+                record["termination"] = termination.group(0)
+            normalized.append(record)
         return normalized
     rows = []
     for line in text.splitlines():
@@ -94,13 +104,15 @@ def parse_history(output: str) -> list[dict]:
             state = "PEND"
         else:
             state = "UNKWN"
-        rows.append(
-            {
-                "job_id": header.group(1),
-                "scheduler_state": state,
-                "name": name.group(1) if name else "",
-            }
-        )
+        row = {
+            "job_id": header.group(1),
+            "scheduler_state": state,
+            "name": name.group(1) if name else "",
+        }
+        termination = _TERMINATION.search(block)
+        if termination:
+            row["termination"] = termination.group(0)
+        rows.append(row)
     return rows
 
 
@@ -130,9 +142,13 @@ class LSFExecutor:
         units = {"KB": 1024, "MB": 1024**2, "GB": 1024**3}
         limit_unit = units[self.site.memory_limit_unit or self.site.memory_unit]
         reservation_unit = units[self.site.memory_reservation_unit or self.site.memory_unit]
-        memory = math.ceil(profile["memory_bytes"] / limit_unit)
+        # The in-job watchdog enforces the frozen budget; the scheduler limit is
+        # a backstop that must sit above it, or its cgroup (which also counts the
+        # shard supervisor and page cache) kills the worker first.
+        job_bytes = profile["memory_bytes"] + int(self.site.memory_headroom_gb * 1024**3)
+        memory = math.ceil(job_bytes / limit_unit)
         reservation = math.ceil(
-            profile["memory_bytes"]
+            job_bytes
             / reservation_unit
             / (profile["native_threads"] if self.site.memory_per_slot else 1)
         )
@@ -190,8 +206,11 @@ class LSFExecutor:
                 argv.append(str(job_id))
             timeout = 300
         else:
+            # exit_reason carries the TERM_* code; only JSON output can hold
+            # its free text without breaking the fixed three-column parser.
             argv = [self.site.bjobs, "-a", "-o", "jobid stat job_name"]
             if self.site.machine_readable:
+                argv[-1] += " exit_reason"
                 argv.append("-json")
             else:
                 argv.append("-noheader")
@@ -225,12 +244,15 @@ class LSFExecutor:
         job = dict(job)
         state = row["scheduler_state"]
         job.update(row)
+        job.pop("reason", None)
         if state in ACTIVE:
             job["status"] = "RUNNING" if state == "RUN" else "QUEUED"
             job.pop("uncertain_since", None)
         elif state in {"DONE", "EXIT"}:
             job["status"] = state
             job.pop("uncertain_since", None)
+            if row.get("termination") in LIMIT_TERMINATIONS:
+                job["reason"] = LIMIT_TERMINATIONS[row["termination"]]
         else:
             job["status"] = "SUBMISSION_UNKNOWN"
         return job

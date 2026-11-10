@@ -42,8 +42,66 @@ def test_lsf_parsers_and_suspension():
         ]["job_id"]
         == "8"
     )
+    killed = parse_jobs(
+        json.dumps(
+            {
+                "RECORDS": [
+                    {
+                        "JOBID": "9",
+                        "STAT": "EXIT",
+                        "JOB_NAME": "test",
+                        "EXIT_REASON": "TERM_MEMLIMIT: job killed after reaching LSF memory "
+                        "usage limit",
+                    },
+                    {"JOBID": "10", "STAT": "EXIT", "JOB_NAME": "test2", "EXIT_REASON": ""},
+                ]
+            }
+        )
+    )
+    assert killed[0]["termination"] == "TERM_MEMLIMIT"
+    assert "termination" not in killed[1]
     with pytest.raises(ValueError):
         parse_jobs("Scheduler unavailable")
+
+
+def test_scheduler_limit_terminations_become_job_reasons():
+    def runner(argv, **kwargs):
+        assert argv[0] == "bjobs" and "exit_reason" in argv[argv.index("-o") + 1]
+        return subprocess.CompletedProcess(
+            argv,
+            0,
+            '{"RECORDS":[{"JOBID":"42","STAT":"EXIT","JOB_NAME":"n",'
+            '"EXIT_REASON":"TERM_RUNLIMIT: job killed after reaching LSF run time limit"}]}',
+            "",
+        )
+
+    executor = LSFExecutor(SiteConfig(queue="test"), runner)
+    job = executor.poll({"name": "n", "token": "t", "status": "RUNNING", "job_id": "42"})
+    assert (job["status"], job["termination"]) == ("EXIT", "TERM_RUNLIMIT")
+    assert job["reason"] == "wall_limit"
+
+    def owner_kill(argv, **kwargs):
+        return subprocess.CompletedProcess(
+            argv,
+            0,
+            '{"RECORDS":[{"JOBID":"42","STAT":"EXIT","JOB_NAME":"n",'
+            '"EXIT_REASON":"TERM_OWNER: job killed by owner"}]}',
+            "",
+        )
+
+    stale = {"name": "n", "token": "t", "status": "SUBMISSION_UNKNOWN", "reason": "stale"}
+    job = LSFExecutor(SiteConfig(queue="test"), owner_kill).poll({**stale, "job_id": "42"})
+    assert (job["status"], job["termination"]) == ("EXIT", "TERM_OWNER")
+    assert "reason" not in job
+
+    def plain(argv, **kwargs):
+        assert argv[argv.index("-o") + 1] == "jobid stat job_name"
+        return subprocess.CompletedProcess(argv, 0, "42 EXIT n", "")
+
+    job = LSFExecutor(SiteConfig(queue="test", machine_readable=False), plain).poll(
+        {"name": "n", "token": "t", "status": "RUNNING", "job_id": "42"}
+    )
+    assert job["status"] == "EXIT" and "termination" not in job
 
 
 def test_lost_submission_reply_is_reconciled_without_resubmission(tmp_path):
@@ -108,6 +166,7 @@ def test_lsf_separate_memory_limit_and_reservation_units(tmp_path):
         memory_limit_unit="KB",
         memory_reservation_unit="MB",
         memory_per_slot=True,
+        memory_headroom_gb=0,
         host_select="type==X86_64",
     )
     LSFExecutor(site, runner).submit(
@@ -116,6 +175,27 @@ def test_lsf_separate_memory_limit_and_reservation_units(tmp_path):
     argv = commands[0]
     assert argv[argv.index("-M") + 1] == "1048576"
     assert argv[argv.index("-R") + 1] == "select[type==X86_64] rusage[mem=512] span[hosts=1]"
+
+
+def test_lsf_job_memory_leaves_headroom_above_the_watchdog_budget(tmp_path):
+    commands = []
+
+    def runner(argv, **kwargs):
+        commands.append(argv)
+        return subprocess.CompletedProcess(argv, 0, "Job <42> is submitted", "")
+
+    site = SiteConfig(queue="test", memory_unit="GB")
+    LSFExecutor(site, runner).submit(
+        ["worker"], tmp_path, runtime_profile(memory_gb=8), name="n", token="t"
+    )
+    argv = commands[0]
+    assert argv[argv.index("-M") + 1] == "9"
+    assert argv[argv.index("-R") + 1] == "rusage[mem=9] span[hosts=1]"
+    with pytest.raises(Exception, match="memory_headroom_gb"):
+        (tmp_path / "site.toml").write_text('[lsf]\nqueue="q"\nmemory_headroom_gb=-1\n')
+        SiteConfig.read(tmp_path / "site.toml")
+    (tmp_path / "site.toml").write_text('[lsf]\nqueue="q"\nmemory_headroom_gb=0\n')
+    assert SiteConfig.read(tmp_path / "site.toml").memory_headroom_gb == 0
 
 
 BHIST = """
@@ -143,6 +223,18 @@ Fri May  1 02:55:50 2026: Done successfully. The CPU time used is 255.2 seconds
 Job <77>, Job Name <bpc-live>, User <ophirazu>,
 Mon Nov  9 15:57:58 2026: Submitted from host <ccc-login5>, to Queue <normal>;
 Mon Nov  9 15:57:58 2026: Starting (Pid 1);
+
+Job <1610286>, Job Name <bpc-d0aa44ac-88d5c872c8a64971b003e867655fa45f>, User <
+                          ophirazu>, Project <default>, Status <EXIT>,
+Tue Nov 10 11:16:04 2026: Submitted from host <cccxc442>, to Queue <normal>;
+Tue Nov 10 11:16:05 2026: Starting (Pid 2990433);
+Tue Nov 10 11:24:22 2026: Exited by LSF signal TERM_MEMLIMIT. The CPU time used
+                           is 683.6 seconds;
+Tue Nov 10 11:24:22 2026: Completed <exit>; TERM_MEMLIMIT: job killed after rea
+                          ching LSF memory usage limit.
+
+ MEMLIMIT
+      8 G
 """
 
 
@@ -152,7 +244,9 @@ def test_bhist_text_history_is_parsed_and_matched_by_unique_name():
         ("1421546", "EXIT", "bpc-probe-1"),
         ("1421546", "DONE", "other-run-with-recycled-id"),
         ("77", "RUN", "bpc-live"),
+        ("1610286", "EXIT", "bpc-d0aa44ac-88d5c872c8a64971b003e867655fa45f"),
     ]
+    assert [row.get("termination") for row in rows] == [None, None, None, "TERM_MEMLIMIT"]
     assert parse_history("No matching job found") == []
     assert parse_jobs(
         '{"RECORDS":[{"JOBID":"5","ERROR":"Job <5> is not found"}]}'
