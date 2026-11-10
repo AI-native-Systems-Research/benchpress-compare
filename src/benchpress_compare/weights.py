@@ -72,12 +72,16 @@ def _inputs(inputs: Iterable[dict]) -> list[dict]:
     return sorted(result, key=lambda item: item["input_id"])
 
 
-def allocate_weights(inputs: Iterable[dict], *, require_all_families: bool = True) -> dict:
+def allocate_weights(
+    inputs: Iterable[dict], *, require_all_families: bool = True, targets=TARGETS, levels=LEVELS
+) -> dict:
     """Allocate input and case weights; absent families are never redistributed.
 
     ``require_all_families=False`` is for an explicitly labelled diagnostic/smoke
     design. Its total mass is the number of represented families divided by eight.
     """
+    targets, levels = _dimensions(targets, levels)
+    case_count = len(targets) * len(levels)
     inputs = _inputs(inputs)
     families = {item["family"] for item in inputs}
     missing = sorted(set(FAMILIES) - families)
@@ -99,17 +103,17 @@ def allocate_weights(inputs: Iterable[dict], *, require_all_families: bool = Tru
         sensitivity = Fraction(1, 8 * len(bands[family]) * k * n)
         allocations[item["input_id"]] = {
             "input_weight": fraction_record(weight),
-            "case_weight": fraction_record(weight / 6),
+            "case_weight": fraction_record(weight / case_count),
             "sensitivity_input_weight": fraction_record(sensitivity),
-            "sensitivity_case_weight": fraction_record(sensitivity / 6),
+            "sensitivity_case_weight": fraction_record(sensitivity / case_count),
             "factors": {
                 "family": fraction_record(Fraction(1, 8)),
                 "band_priority": fraction_record(PRIORITIES[band]),
                 "supported_band_priority_sum": fraction_record(z),
                 "recipe_count": k,
                 "recipe_input_count": n,
-                "target": fraction_record(Fraction(1, 3)),
-                "level": fraction_record(Fraction(1, 2)),
+                "target": fraction_record(Fraction(1, len(targets))),
+                "level": fraction_record(Fraction(1, len(levels))),
             },
         }
         marginals["family"][family] += weight
@@ -148,8 +152,10 @@ def allocate_weights(inputs: Iterable[dict], *, require_all_families: bool = Tru
 
 
 def assign_case_weights(
-    cases: Iterable[dict], allocation: dict | None = None, *, require_all_families: bool = True
+    cases: Iterable[dict], allocation: dict | None = None, *, require_all_families: bool = True,
+    targets=TARGETS, levels=LEVELS,
 ) -> list[dict]:
+    targets, levels = _dimensions(targets, levels)
     cases = [dict(case) for case in cases]
     inputs = {}
     for case in cases:
@@ -164,7 +170,7 @@ def assign_case_weights(
             raise WeightError(f"conflicting metadata for input {key}")
         inputs[key] = metadata
     allocation = allocation or allocate_weights(
-        inputs.values(), require_all_families=require_all_families
+        inputs.values(), require_all_families=require_all_families, targets=targets, levels=levels
     )
     for case in cases:
         if case.get("supplemental", False):
@@ -174,11 +180,27 @@ def assign_case_weights(
             case["weight"] = dict(entry["case_weight"])
             case["sensitivity_weight"] = dict(entry["sensitivity_case_weight"])
             case["weight_factors"] = entry["factors"]
-    audit_case_weights(cases, require_all_families=require_all_families)
+    audit_case_weights(
+        cases, require_all_families=require_all_families, targets=targets, levels=levels
+    )
     return cases
 
 
-def audit_case_weights(cases: Iterable[dict], *, require_all_families: bool = True) -> dict:
+def _dimensions(targets, levels):
+    targets, levels = tuple(targets), tuple(levels)
+    if (
+        not targets or not levels
+        or len(set(targets)) != len(targets) or len(set(levels)) != len(levels)
+        or not set(targets) <= set(TARGETS) or not set(levels) <= set(LEVELS)
+    ):
+        raise WeightError("invalid target/level dimensions")
+    return targets, levels
+
+
+def audit_case_weights(
+    cases: Iterable[dict], *, require_all_families: bool = True, targets=TARGETS, levels=LEVELS
+) -> dict:
+    targets, levels = _dimensions(targets, levels)
     cases = list(cases)
     ids = [case["case_id"] for case in cases]
     if len(set(ids)) != len(ids):
@@ -197,8 +219,9 @@ def audit_case_weights(cases: Iterable[dict], *, require_all_families: bool = Tr
         grouped[case["input_id"]].append(case)
     for key, group in grouped.items():
         configurations = Counter((case["target_class"], case["level"]) for case in group)
-        if configurations != Counter((target, level) for target in TARGETS for level in LEVELS):
-            raise WeightError(f"input {key} must have exactly all six target/level cases")
+        if configurations != Counter((target, level) for target in targets for level in levels):
+            count = "all six" if targets == TARGETS and levels == LEVELS else "the declared"
+            raise WeightError(f"input {key} must have exactly {count} target/level cases")
         for field in ("weight", "sensitivity_weight"):
             if len({read_fraction(case[field]) for case in group}) != 1:
                 raise WeightError(f"unequal case weights within input {key}")
@@ -234,9 +257,9 @@ def audit_case_weights(cases: Iterable[dict], *, require_all_families: bool = Tr
             ] += weight
         checks = {
             "family": Fraction(1, 8),
-            "target": expected / 3,
-            "level": expected / 2,
-            "family_target_level": Fraction(1, 48),
+            "target": expected / len(targets),
+            "level": expected / len(levels),
+            "family_target_level": Fraction(1, 8 * len(targets) * len(levels)),
         }
         if total != expected or any(
             value != checks[name] for name, values in totals.items() for value in values.values()

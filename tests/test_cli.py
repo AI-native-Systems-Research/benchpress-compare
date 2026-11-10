@@ -2,6 +2,8 @@ import json
 import subprocess
 import sys
 
+import pytest
+
 from benchpress_compare.cli import main, parser
 from benchpress_compare.identity import atomic_write_json
 
@@ -55,6 +57,35 @@ def test_resume_preserves_sources_and_rejects_seed_change(tmp_path, capsys):
     assert saved.baseline == "/deleted/source-a"
     assert main(["run", "--results-root", str(root), "--seeds", "7"]) == 2
     assert "immutable" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("name,count", [("evolve", 44), ("small", 22)])
+def test_profile_audit(name, count, capsys):
+    assert main(["audit", "--profile", name]) == 0
+    output = json.loads(capsys.readouterr().out)
+    assert output["profile"] == name
+    assert output["design"] == f"benchpress-{name}-v1"
+    assert output["candidate_count"] == output["main_candidates"] == count
+    assert output["expected_observations"] == count * 3 * 2
+    assert len(output["profile_manifest_hash"]) == 64
+
+
+def test_saved_profile_is_used_when_omitted_and_cannot_be_changed(tmp_path):
+    from benchpress_compare.cli import _config
+    from benchpress_compare.config import RunConfig
+    from benchpress_compare.errors import CompareError
+
+    root = tmp_path / "run"
+    config = RunConfig("/deleted/a", "/deleted/b", str(tmp_path / "store"), str(root),
+                       profile="small", design="benchpress-small-v1")
+    atomic_write_json(root / "request.json", {"schema_version": 1, "config": config.to_dict()})
+    for command in ("run", "prepare", "resume"):
+        assert _config(parser().parse_args([command, "--results-root", str(root)])).profile == "small"
+    assert _config(parser().parse_args(
+        ["run", "--results-root", str(root), "--profile", "small"]
+    )).wall_seconds == 60
+    with pytest.raises(CompareError, match="Saved profile is immutable"):
+        _config(parser().parse_args(["run", "--results-root", str(root), "--profile", "full"]))
 
 
 def test_report_reads_committed_results_without_original_harness(tmp_path, capsys):

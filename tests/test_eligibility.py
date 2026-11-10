@@ -1,5 +1,7 @@
 from itertools import product
 
+import pytest
+
 from benchpress_compare.eligibility import admit, apply_admission
 from benchpress_compare.weights import LEVELS, TARGETS, read_fraction
 
@@ -98,3 +100,51 @@ def test_empty_family_in_eight_family_design_yields_no_weights_instead_of_redist
     assert "empty families" in plan["admission"]["weights_error"]
     assert all(read_fraction(case["weight"]) == 0 for case in plan["cases"])
     assert plan["weights_audit"] is None
+
+
+@pytest.mark.parametrize("name", ["evolve", "small"])
+def test_subset_admission_reweights_inputs_and_keeps_evolve_failures(name):
+    from benchpress_compare.corpus import load_catalogue
+    from benchpress_compare.profiles import load_profile, select_candidates
+    from benchpress_compare.report import build_report
+    from benchpress_compare.weights import allocate_weights
+
+    manifest = load_profile(name)
+    inputs = select_candidates(manifest, load_catalogue()["candidates"])
+    planned = [
+        dict(row, case_id=row["input_id"], target_class="heavy-hex", target_id="heavy-hex",
+             level=2, seeds=[1, 2, 3]) for row in inputs
+    ]
+    baseline = results(planned)
+    evolve = results(planned, arm="evolve")
+    plan = {"profile": name, "design": manifest["design"], "cases": planned,
+            "profile_manifest": manifest, "config": {"profile": name}}
+    admitted = apply_admission(plan, baseline + evolve)
+    assert admitted["admission"]["weights_error"] is None
+    assert admitted["weights_audit"]["case_count"] == len(inputs)
+    assert build_report(admitted, baseline + evolve)["summary"]["metrics"]["N2"]["score"] == 1
+
+    baseline[0]["status"] = "INVALID"
+    admitted = apply_admission(plan, baseline + evolve)
+    assert admitted["admission"]["dropped"] == [planned[0]["input_id"]]
+    allocation = allocate_weights(inputs[1:], targets=["heavy-hex"], levels=[2])
+    for case in admitted["cases"]:
+        assert read_fraction(case["weight"]) == (
+            0 if case["input_id"] == planned[0]["input_id"]
+            else read_fraction(allocation["inputs"][case["input_id"]]["input_weight"])
+        )
+    evolve[3]["status"] = "COMPILER_FAILED"
+    failed = apply_admission(plan, baseline + evolve)
+    assert failed["admission"] == admitted["admission"]
+    report = build_report(failed, baseline + evolve)
+    assert report["summary"]["metrics"]["N2"]["score"] is None
+    assert report["score_without_evolve_failures"]["metrics"]["N2"]["score"] == 1
+
+    # F8 has only one selected input in small: losing it must block the score.
+    without_family = [row for row in baseline if not row["case_id"].startswith("Q/large/32")]
+    if name == "evolve":
+        f8_ids = {row["input_id"] for row in inputs if row["family"] == "F8"}
+        without_family = [row for row in baseline if row["case_id"] not in f8_ids]
+    empty = apply_admission(plan, without_family + evolve)
+    assert "empty families" in empty["admission"]["weights_error"]
+    assert all(read_fraction(case["weight"]) == 0 for case in empty["cases"])

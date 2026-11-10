@@ -14,6 +14,7 @@ from .executors.lsf import LSFExecutor
 from .identity import atomic_write_json, canonical_hash, harness_identity, read_json
 from .orchestrator import status, verify_plan
 from .pilot import runtime_profile
+from .profiles import load_profile
 from .store import Lease
 
 
@@ -89,6 +90,10 @@ def submit_controller(config: RunConfig, *, prepare_only=False, retry_cancelled=
                     request_path,
                     {
                         "schema_version": 1,
+                        "profile": config.profile,
+                        "design": config.design,
+                        "profile_manifest": load_profile(config.profile),
+                        "profile_manifest_hash": config.profile_manifest_hash,
                         "config": config.to_dict(),
                         "coordinator_hash": harness_identity(),
                     },

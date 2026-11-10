@@ -7,6 +7,30 @@ import pytest
 from benchpress_compare.identity import atomic_write_json, canonical_hash
 
 
+def test_subset_target_freezing_uses_only_heavy_hex_and_deduplicates_widths(tmp_path, monkeypatch):
+    pytest.importorskip("qiskit")
+    from benchpress_compare.identity import read_json
+    from benchpress_compare.targets import synthetic_target
+    from benchpress_compare.worker import _run_task
+
+    def unexpected_torino():
+        pytest.fail("A heavy-hex subset must not freeze FakeTorino")
+
+    monkeypatch.setattr("benchpress_compare.targets.freeze_fake_torino", unexpected_torino)
+    result, _ = _run_task(
+        {"task": "freeze-targets", "declared_widths": [8, 15, 30, 64],
+         "target_classes": ["heavy-hex"], "destination": str(tmp_path / "targets")}, tmp_path
+    )
+    snapshots = result["result"]["targets"]
+    assert {row["target_class"] for row in snapshots} == {"heavy-hex"}
+    expected = {synthetic_target("heavy-hex", width)["target_hash"] for width in (8, 15, 30, 64)}
+    assert {row["target_hash"] for row in snapshots} == expected
+    assert len(snapshots) == len(expected)
+    assert len(list((tmp_path / "targets").glob("*.json"))) == len(expected)
+    for row in snapshots:
+        assert read_json(row["path"])["target_hash"] == row["target_hash"]
+
+
 def test_native_budget_and_instrumentation_do_not_change_compilation():
     qiskit = pytest.importorskip("qiskit")
     from benchpress_compare.targets import synthetic_target, import_target

@@ -1,0 +1,124 @@
+{
+  "full": {
+    "schema_version": 1,
+    "profile": "full",
+    "design": "benchpress-eight-family-v1",
+    "specification": {
+      "path": "docs/design/benchpress_subset_spec.md",
+      "revision": "2026-11-09"
+    },
+    "input_ids": null,
+    "targets": [
+      "square",
+      "heavy-hex",
+      "fake_torino"
+    ],
+    "levels": [
+      2,
+      3
+    ],
+    "default_wall_seconds": 3600
+  },
+  "evolve": {
+    "schema_version": 1,
+    "profile": "evolve",
+    "design": "benchpress-evolve-v1",
+    "specification": {
+      "path": "docs/design/benchpress_subset_evolve_spec.md",
+      "revision": "2026-11-10"
+    },
+    "input_ids": [
+      "Q/medium/factor247_n15",
+      "Q/medium/qf21_n15",
+      "Q/medium/qft_n18",
+      "Q/large/qft_n63",
+      "S/test_QFT_100_transpile",
+      "Q/medium/multiplier_n15",
+      "F/qcla_com_7.qasm",
+      "F/gf2^10_mult.qasm",
+      "Q/large/adder_n64",
+      "F/gf2^32_mult.qasm",
+      "Q/large/adder_n118",
+      "F/hwb10.qasm",
+      "F/ham15-med.qasm",
+      "F/barenco_tof_10.qasm",
+      "Q/large/swap_test_n41",
+      "S/test_BV_100_transpile",
+      "Q/large/knn_129",
+      "Q/large/dnn_n33",
+      "Q/large/qugan_n39",
+      "Q/large/dnn_n51",
+      "S/test_circSU2_89_transpile",
+      "Q/large/qugan_n111",
+      "H/ham_complbipart-n-10_a-5_b-5",
+      "Q/medium/sat_n11",
+      "H/ham_reg-5_n-10_rinst-07",
+      "H/ham_gnp-k_5_n-90_rinst-02",
+      "H/ham_tsp_prob-pr76_Ncity-10_enc-unary",
+      "S/test_QAOA_100_transpile",
+      "H/ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-4_U-40_enc-gray_d-8",
+      "Q/medium/bwt_n21",
+      "H/ham_bh_graph-2D-triag-nonpbc-qubitnodes_Lx-3_Ly-5_U-30_enc-gray_d-4",
+      "H/ham_bh_graph-1D-grid-nonpbc-qubitnodes_Lx-12_U-40_enc-unary_d-4",
+      "H/ham_graph-2D-triag-pbc-qubitnodes_Lx-13_Ly-13_h-0.1",
+      "H/ham_fh-graph-1D-grid-pbc-qubitnodes_Lx-50_U-2_enc-jw",
+      "Q/small/vqe_uccsd_n8",
+      "Q/medium/gcm_h6",
+      "H/ham_enc_gray_dvalues_4-4-4-4-4-4-4",
+      "H/ham_ham_JW14",
+      "H/ham_ham_JW-18",
+      "Q/large/vqe_uccsd_n28",
+      "Q/large/32",
+      "Q/large/100",
+      "S/test_QV_100_transpile",
+      "S/test_clifford_100_transpile"
+    ],
+    "targets": [
+      "heavy-hex"
+    ],
+    "levels": [
+      2
+    ],
+    "default_wall_seconds": 900
+  },
+  "small": {
+    "schema_version": 1,
+    "profile": "small",
+    "design": "benchpress-small-v1",
+    "specification": {
+      "path": "docs/design/benchpress_subset_small_spec.md",
+      "revision": "2026-11-10"
+    },
+    "input_ids": [
+      "Q/medium/qf21_n15",
+      "Q/medium/qft_n18",
+      "Q/large/qft_n63",
+      "Q/medium/multiplier_n15",
+      "F/gf2^10_mult.qasm",
+      "Q/large/adder_n64",
+      "F/ham15-med.qasm",
+      "F/barenco_tof_10.qasm",
+      "Q/large/swap_test_n41",
+      "Q/large/dnn_n33",
+      "Q/large/qugan_n39",
+      "Q/large/dnn_n51",
+      "H/ham_complbipart-n-10_a-5_b-5",
+      "Q/medium/sat_n11",
+      "H/ham_reg-5_n-10_rinst-07",
+      "H/ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-4_U-40_enc-gray_d-8",
+      "H/ham_bh_graph-2D-triag-nonpbc-qubitnodes_Lx-3_Ly-5_U-30_enc-gray_d-4",
+      "H/ham_bh_graph-1D-grid-nonpbc-qubitnodes_Lx-12_U-40_enc-unary_d-4",
+      "Q/small/vqe_uccsd_n8",
+      "H/ham_enc_gray_dvalues_4-4-4-4-4-4-4",
+      "H/ham_ham_JW14",
+      "Q/large/32"
+    ],
+    "targets": [
+      "heavy-hex"
+    ],
+    "levels": [
+      2
+    ],
+    "default_wall_seconds": 60
+  }
+}

@@ -94,22 +94,36 @@ def fake_preparation(monkeypatch):
             fixture = {
                 **fields["candidate"],
                 "schema_version": 1,
-                "active_width": 8,
+                "active_width": fields["candidate"].get(
+                    "active_width", fields["candidate"]["declared_width"]
+                ),
                 "fixture_hash": canonical_hash(fields["candidate"]),
             }
             atomic_write_json(fields["destination"], fixture)
             return fixture
         if name == "freeze-targets":
+            from benchpress_compare.targets import heavy_hex_distance
+            import math
+
             targets = []
-            for target_class, width in (("square", 9), ("heavy-hex", 19), ("fake_torino", 133)):
+            capacities = set()
+            for declared in fields["declared_widths"]:
+                d = heavy_hex_distance(declared)
+                widths = {
+                    "square": (math.isqrt(declared - 1) + 1) ** 2,
+                    "heavy-hex": (5 * d * d - 2 * d - 1) // 2,
+                    "fake_torino": 133,
+                }
+                capacities.update((name, widths[name]) for name in fields["target_classes"])
+            for target_class, width in sorted(capacities):
                 target = {
                     "schema_version": 1,
                     "target_class": target_class,
                     "num_qubits": width,
                     "snapshot_id": target_class + str(width),
-                    "target_hash": canonical_hash(target_class),
+                    "target_hash": canonical_hash((target_class, width)),
                 }
-                path = Path(fields["destination"]) / f"{target_class}.json"
+                path = Path(fields["destination"]) / f"{target_class}-{width}.json"
                 atomic_write_json(path, target)
                 targets.append({**target, "path": str(path)})
             return {"targets": targets}
@@ -183,6 +197,62 @@ def test_smoke_plan_and_structural_variant_identity(tmp_path, fake_preparation, 
     assert {case["input_id"] for case in plan["cases"]} == {"input-1", "input-2"}
     variants = {case.get("structural_canonical") for case in plan["cases"]}
     assert variants == {None, "input-1"}
+
+
+def test_profiles_freeze_only_the_selected_cases_with_shared_identities_and_seeds(
+    tmp_path, fake_preparation, monkeypatch
+):
+    import benchpress_compare.preparation as module
+    from benchpress_compare.corpus import load_catalogue
+    from benchpress_compare.profiles import load_profile
+
+    monkeypatch.setattr(module, "load_catalogue", load_catalogue)
+    fake_preparation["site"] = SiteConfig(queue="normal", job_wall_seconds=86400)
+    plans = {}
+    for name, inputs, cases, jobs in (("full", 149, 894, None), ("evolve", 44, 44, 59),
+                                     ("small", 22, 22, 22)):
+        directory = tmp_path / name
+        directory.mkdir()
+        cfg = config(directory, profile=name)
+        plan = prepare(cfg)
+        plans[name] = plan
+        assert plan["expected_counts"]["candidates"] == inputs
+        assert plan["expected_counts"]["cases"] == cases
+        assert len(plan["observations"]) == cases * 6
+        if jobs is not None:
+            assert plan["expected_counts"]["jobs"] == jobs
+            assert {(case["target_class"], case["level"]) for case in plan["cases"]} == {
+                ("heavy-hex", 2)
+            }
+            targets = read_json(directory / "results/preparation.json")["targets"]
+            assert {target["target_class"] for target in targets} == {"heavy-hex"}
+        request = read_json(directory / "results/request.json")
+        assert request["profile_manifest"] == plan["profile_manifest"] == load_profile(name)
+        assert request["profile_manifest_hash"] == plan["profile_manifest_hash"] == canonical_hash(
+            load_profile(name)
+        )
+        assert request["design"] == plan["design"]
+        assert cfg.complete_families_required
+        assert prepare(cfg, continue_existing=True) == plan
+    full = {case["case_id"]: case for case in plans["full"]["cases"]}
+    evolve = {case["case_id"]: case for case in plans["evolve"]["cases"]}
+    for case in plans["small"]["cases"]:
+        assert case["seeds"] == evolve[case["case_id"]]["seeds"] == full[case["case_id"]]["seeds"]
+        assert case["target_hash"] == evolve[case["case_id"]]["target_hash"]
+
+
+def test_partial_preparation_rejects_changed_profile_manifest(tmp_path, fake_preparation):
+    import benchpress_compare.preparation as module
+
+    cfg = config(tmp_path).validate()
+    root = Path(cfg.results_root)
+    root.mkdir()
+    module._request_config(root, cfg, False)
+    request = read_json(root / "request.json")
+    request["profile_manifest"]["levels"] = [3]
+    atomic_write_json(root / "request.json", request)
+    with pytest.raises(IntegrityError, match="Profile manifest changed"):
+        prepare(cfg, continue_existing=True)
 
 
 def test_frozen_plan_rejects_new_incompatible_request(tmp_path, fake_preparation):
@@ -299,11 +369,12 @@ def test_cached_harness_wheel_must_match_actual_coordinator(tmp_path):
     import zipfile
     import benchpress_compare
     from benchpress_compare.corpus import load_catalogue
+    from benchpress_compare.profiles import load_profiles
 
     package = Path(benchpress_compare.__file__).parent
     wheel = tmp_path / "benchpress_compare-0.1.0-py3-none-any.whl"
 
-    def write_wheel(*, corrupt=False):
+    def write_wheel(*, corrupt=False, corrupt_profiles=False):
         with zipfile.ZipFile(wheel, "w") as archive:
             for path in package.rglob("*.py"):
                 if "__pycache__" in path.parts:
@@ -313,10 +384,17 @@ def test_cached_harness_wheel_must_match_actual_coordinator(tmp_path):
                     content += b"\n# stale implementation\n"
                 archive.writestr("benchpress_compare/" + path.relative_to(package).as_posix(), content)
             archive.writestr("benchpress_compare/data/candidates.json", json.dumps(load_catalogue()))
+            profiles = load_profiles()
+            if corrupt_profiles:
+                profiles["small"]["input_ids"].pop()
+            archive.writestr("benchpress_compare/data/profiles.json", json.dumps(profiles))
 
     write_wheel()
     assert _verify_harness_wheel(wheel) == wheel
     assert _harness_wheel(tmp_path) == wheel
     write_wheel(corrupt=True)
+    with pytest.raises(IntegrityError, match="differs from the running coordinator"):
+        _harness_wheel(tmp_path)
+    write_wheel(corrupt_profiles=True)
     with pytest.raises(IntegrityError, match="differs from the running coordinator"):
         _harness_wheel(tmp_path)

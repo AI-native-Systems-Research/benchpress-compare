@@ -68,9 +68,59 @@ uv run benchpress-compare run --results-root /benchmarks/results/change-001
 
 `run` with all four paths prepares and collects in one invocation. `prepare`
 builds both arms, freezes fixtures and targets, checks that both builds import
-them, and publishes `plan.json`: every candidate on all six target/level
-configurations, every seed, both arms. Nothing is measured before the plan is
-frozen.
+them, and publishes `plan.json` for the selected profile, every seed, and both
+arms. Nothing is measured before the plan is frozen.
+
+### Profiles
+
+Select `--profile full`, `--profile evolve`, or `--profile small` on a new
+`prepare` or `run`. **`full` is the default.** The checked-in
+[profile manifests](data/profiles.json) pin the input selection, target classes,
+optimization levels, and specification revision.
+
+| Profile | Inputs before admission | Targets and levels | Observations with 3 seeds | Default watchdog |
+| --- | ---: | --- | ---: | ---: |
+| [full](docs/design/benchpress_subset_spec.md) | 149 (138 main-table + 11 additional) | square, heavy-hex, FakeTorino; L2 and L3 | 5,364 | 3,600 s |
+| [evolve](docs/design/benchpress_subset_evolve_spec.md) | 44 | heavy-hex; L2 | 264 | 900 s |
+| [small](docs/design/benchpress_subset_small_spec.md) | 22 | heavy-hex; L2 | 132 | 60 s |
+
+For example, run the small profile with:
+
+```bash
+uv run benchpress-compare run \
+  --baseline /sources/qiskit-baseline \
+  --evolve /sources/qiskit-evolve \
+  --store /benchmarks/store \
+  --results-root /benchmarks/results/change-001-small \
+  --corpus /sources/benchpress \
+  --profile small --executor local
+
+uv run benchpress-compare audit --profile evolve
+```
+
+Use `--profile evolve` and a new results directory for the larger subset. Both
+subsets keep all eight families, each with weight 1/8 after baseline admission.
+Weights are recomputed over the admitted selection; with one case per input,
+case weight equals input weight. The small selection is contained in evolve,
+with identical heavy-hex targets, L2 cases, and seeds at the same master seed.
+Neither subset accepts `--smoke` or `--allow-missing-families`.
+
+Subset reports label their scores as search signals. Screen candidates with
+small, evaluate passing candidates with evolve, and confirm final improvements
+with full. An empty admitted family leaves the subset score unavailable.
+
+The profile, design name, manifest, and manifest hash are frozen in `request.json`
+and `plan.json`. Continuation uses that saved selection; switching profiles
+requires a new results directory. `--wall-seconds` overrides the profile's
+watchdog. Seeds (3), native threads (1), and worker memory (8 GB) have the same
+defaults for all profiles. Runtime limits enter baseline cache identities, so
+small and evolve's different default watchdogs prevent cross-profile baseline
+reuse; keep runtime settings fixed within a search.
+
+For LSF, the specifications target about 40 minutes end to end for evolve and
+10 minutes of collection for small, assuming the stated cluster conditions.
+Small still needs source-build preparation; its expected end-to-end time is
+about 16–23 minutes. These are planning estimates, not measured guarantees.
 
 After collection, the report admits inputs from baseline results only. An input
 is dropped when any of its baseline observations failed or is missing; of

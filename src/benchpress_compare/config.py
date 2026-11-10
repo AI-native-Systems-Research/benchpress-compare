@@ -9,6 +9,8 @@ from pathlib import Path
 import tomllib
 
 from .errors import CompareError
+from .identity import canonical_hash
+from .profiles import load_profile
 
 
 def positive(value: str) -> int:
@@ -44,7 +46,7 @@ class RunConfig:
     native_threads: int = 1
     cpu_budget: float | None = None
     memory_gb: float | None = None
-    wall_seconds: float = 3600
+    wall_seconds: float | None = None
     worker_memory_gb: float = 8
     build_cpus: int = 4
     infrastructure_retries: int = 1
@@ -53,8 +55,22 @@ class RunConfig:
     allow_missing_families: bool = False
     design: str = "benchpress-eight-family-v1"
     schema_version: int = 1
+    profile: str = "full"
+    profile_manifest_hash: str | None = None
+
+    def __post_init__(self):
+        if self.wall_seconds is None:
+            self.wall_seconds = load_profile(self.profile)["default_wall_seconds"]
 
     def validate(self):
+        manifest = load_profile(self.profile)
+        manifest_hash = canonical_hash(manifest)
+        if self.profile_manifest_hash not in (None, manifest_hash):
+            raise CompareError("Profile manifest changed after the request was frozen")
+        self.profile_manifest_hash = manifest_hash
+        if self.profile != "full" and (self.smoke or self.allow_missing_families):
+            raise CompareError("Subset profiles cannot use --smoke or --allow-missing-families")
+        self.design = manifest["design"]
         for key in ("baseline", "evolve", "store", "results_root"):
             setattr(self, key, str(Path(getattr(self, key)).expanduser().resolve()))
         sources = [Path(self.baseline), Path(self.evolve)]

@@ -31,13 +31,14 @@ from .identity import (
 from .orchestrator import ExecutionEngine, verify_plan
 from .pilot import runtime_profile
 from .planner import BIG_CIRCUITS, observations_for, shard_bundles
+from .profiles import load_profile, select_candidates
 from .schema import PROTOCOLS, TRANSPILE_CONTRACT, validate_record
 from .seeds import derive_seeds, seed_contract
 from .store import Lease, Store
 
 
 def _verify_harness_wheel(wheel):
-    """Compare packaged code and catalogue with the coordinator before reuse."""
+    """Compare packaged code, catalogue and profiles with the coordinator before reuse."""
     import hashlib
     import json
     import zipfile
@@ -55,10 +56,16 @@ def _verify_harness_wheel(wheel):
                 if name.startswith("benchpress_compare/") and name.endswith(".py")
             }
             catalogue = json.loads(archive.read("benchpress_compare/data/candidates.json"))
+            profiles = json.loads(archive.read("benchpress_compare/data/profiles.json"))
     except (OSError, ValueError, KeyError, zipfile.BadZipFile) as exc:
         raise IntegrityError(f"Cannot verify preparation harness wheel: {exc}") from exc
     identity = canonical_hash(
-        {"schema_version": 1, "sources": sources, "catalogue": canonical_hash(catalogue)}
+        {
+            "schema_version": 1,
+            "sources": sources,
+            "catalogue": canonical_hash(catalogue),
+            "profiles": canonical_hash(profiles),
+        }
     )
     if identity != harness_identity():
         raise IntegrityError("Preparation harness wheel differs from the running coordinator")
@@ -357,6 +364,12 @@ def _request_config(root, config, continue_existing):
     if request_path.exists():
         request = read_json(request_path)
         saved = request["config"]
+        manifest = load_profile(saved.get("profile", "full"))
+        if (
+            request.get("profile_manifest", manifest) != manifest
+            or saved.get("profile_manifest_hash") not in (None, canonical_hash(manifest))
+        ):
+            raise IntegrityError("Profile manifest changed after the run request was frozen")
         pinned = request.get("coordinator_hash")
         if pinned is None and (root / "preparation.json").exists():
             pinned = read_json(root / "preparation.json").get("coordinator_hash")
@@ -375,7 +388,15 @@ def _request_config(root, config, continue_existing):
         raise CompareError("New results directory must be empty")
     atomic_write_json(
         request_path,
-        {"schema_version": 1, "config": config.to_dict(), "coordinator_hash": harness_identity()},
+        {
+            "schema_version": 1,
+            "profile": config.profile,
+            "design": config.design,
+            "profile_manifest": load_profile(config.profile),
+            "profile_manifest_hash": config.profile_manifest_hash,
+            "config": config.to_dict(),
+            "coordinator_hash": harness_identity(),
+        },
     )
     return config
 
@@ -396,7 +417,10 @@ def prepare(config: RunConfig, *, continue_existing=False, retry_cancelled=False
         try:
             engine.state("PREPARING")
             catalogue = load_catalogue()
-            candidates = catalogue["candidates"]
+            manifest = read_json(root / "request.json").get("profile_manifest") or load_profile(
+                config.profile
+            )
+            candidates = select_candidates(manifest, catalogue["candidates"])
             if config.smoke:
                 unknown = set(config.smoke) - {row["input_id"] for row in candidates}
                 if unknown:
@@ -432,6 +456,7 @@ def prepare(config: RunConfig, *, continue_existing=False, retry_cancelled=False
                 "freeze-targets",
                 {
                     "declared_widths": sorted({fixture["declared_width"] for fixture in fixtures}),
+                    "target_classes": manifest["targets"],
                     "destination": str(root / "fixtures/targets"),
                 },
                 python=builds["baseline"]["env_python"],
@@ -487,7 +512,7 @@ def prepare(config: RunConfig, *, continue_existing=False, retry_cancelled=False
                     "heavy-hex": (5 * distance * distance - 2 * distance - 1) // 2,
                     "fake_torino": 133,
                 }
-                for target_class in ("square", "heavy-hex", "fake_torino"):
+                for target_class in manifest["targets"]:
                     matches = [
                         t
                         for t in targets
@@ -499,7 +524,7 @@ def prepare(config: RunConfig, *, continue_existing=False, retry_cancelled=False
                             f"Expected exactly one {target_class} snapshot at width {width}"
                         )
                     target = matches[0]
-                    for level in (2, 3):
+                    for level in manifest["levels"]:
                         case_id = case_identity(
                             fixture["fixture_hash"], target["target_hash"], level, contract_hash
                         )
@@ -537,6 +562,10 @@ def prepare(config: RunConfig, *, continue_existing=False, retry_cancelled=False
                         cases.append(case)
             contract = {
                 "schema_version": 1,
+                "profile": config.profile,
+                "design": config.design,
+                "profile_manifest": manifest,
+                "profile_manifest_hash": canonical_hash(manifest),
                 "config": config.to_dict(),
                 "protocols": PROTOCOLS,
                 "coordinator_hash": harness_identity(),
@@ -576,7 +605,10 @@ def prepare(config: RunConfig, *, continue_existing=False, retry_cancelled=False
             )
             plan = {
                 "schema_version": 1,
+                "profile": config.profile,
                 "design": config.design,
+                "profile_manifest": manifest,
+                "profile_manifest_hash": canonical_hash(manifest),
                 "config": config.to_dict(),
                 "cases": cases,
                 "coordinator_hash": harness_identity(),

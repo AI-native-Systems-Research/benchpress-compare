@@ -3,6 +3,8 @@ import json
 import subprocess
 import sys
 
+import pytest
+
 from benchpress_compare.report import build_report, write_report
 
 
@@ -142,3 +144,26 @@ def test_score_without_evolve_failures_covers_the_remaining_circuits():
     assert partial["excluded_inputs"] == ["Q/circuit"]
     assert partial["excluded_weight"] == {"numerator": 1, "denominator": 8}
     assert partial["metrics"]["N2"]["score"] == 1
+
+
+@pytest.mark.parametrize("name", ["evolve", "small"])
+def test_subset_report_preserves_profile_provenance_and_labels_search_signal(name):
+    from benchpress_compare.identity import canonical_hash
+    from benchpress_compare.profiles import load_profile
+    from benchpress_compare.report import render_markdown
+
+    plan, observations = fixture()
+    manifest = load_profile(name)
+    plan.update(profile=name, design=manifest["design"], profile_manifest=manifest,
+                profile_manifest_hash=canonical_hash(manifest))
+    report = build_report(plan, observations)
+    assert report["profile"] == name
+    assert report["profile_manifest_hash"] == canonical_hash(manifest)
+    assert report["provenance"]["profile_manifest"] == manifest
+    assert report["score_scope"] == "subset_search_signal"
+    markdown = render_markdown(report)
+    assert manifest["design"] in markdown
+    assert "subset score is a search signal" in markdown
+    assert "Confirm any improvement on the full" in markdown
+    if name == "small":
+        assert "no large-band inputs" in markdown

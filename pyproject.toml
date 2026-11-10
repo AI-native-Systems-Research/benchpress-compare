@@ -21,6 +21,7 @@ packages = ["src/benchpress_compare"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "data/candidates.json" = "benchpress_compare/data/candidates.json"
+"data/profiles.json" = "benchpress_compare/data/profiles.json"
 "data/LICENSE-BENCHPRESS.txt" = "benchpress_compare/data/LICENSE-BENCHPRESS.txt"
 
 [tool.pytest.ini_options]

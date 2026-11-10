@@ -155,12 +155,18 @@ def _run_task(spec, output):
         destination = Path(spec.get("destination", output / "targets"))
         destination.mkdir(parents=True, exist_ok=True)
         targets = {}
+        target_classes = spec.get("target_classes", ["square", "heavy-hex", "fake_torino"])
+        if not target_classes or not set(target_classes) <= {"square", "heavy-hex", "fake_torino"}:
+            raise ValueError("Unknown or empty target classes")
         for width in sorted(set(spec["declared_widths"])):
-            for topology in ("square", "heavy-hex"):
+            for topology in target_classes:
+                if topology == "fake_torino":
+                    continue
                 target = synthetic_target(topology, width)
                 targets[target["target_hash"]] = target
-        torino = freeze_fake_torino()
-        targets[torino["target_hash"]] = torino
+        if "fake_torino" in target_classes:
+            torino = freeze_fake_torino()
+            targets[torino["target_hash"]] = torino
         results = []
         for digest, target in sorted(targets.items()):
             import_target(target)

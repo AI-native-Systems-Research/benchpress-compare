@@ -7,6 +7,7 @@ from typing import Iterable
 
 from .validation import REQUIRED_CHECKS
 from .weights import WeightError, assign_case_weights, audit_case_weights
+from .profiles import load_profile
 
 ADMISSION_POLICY = "post-collection-baseline-success-v2"
 REQUIRED_VALIDATION_CHECKS = frozenset(REQUIRED_CHECKS)
@@ -140,10 +141,12 @@ def apply_admission(plan: dict, observations: Iterable[dict]) -> dict:
             case["verified_structural_group"] = record["structural_group"]
         cases.append(case)
     config = plan.get("config", {})
+    manifest = plan.get("profile_manifest") or load_profile(config.get("profile", "full"))
+    dimensions = {"targets": manifest["targets"], "levels": manifest["levels"]}
     require_all = not (config.get("smoke") or config.get("allow_missing_families"))
     try:
-        cases = assign_case_weights(cases, require_all_families=require_all)
-        audit = audit_case_weights(cases, require_all_families=require_all)
+        cases = assign_case_weights(cases, require_all_families=require_all, **dimensions)
+        audit = audit_case_weights(cases, require_all_families=require_all, **dimensions)
         admission["weights_error"] = None
     except WeightError as exc:
         zero = {"numerator": 0, "denominator": 1}

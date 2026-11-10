@@ -11,6 +11,7 @@ import sys
 from .config import RunConfig
 from .errors import CompareError, ExitCode
 from .identity import canonical_hash, read_json
+from .profiles import PROFILE_NAMES, load_profile, select_candidates
 
 
 def parser():
@@ -30,13 +31,18 @@ def parser():
             for path in ("baseline", "evolve", "store", "corpus", "lsf-config"):
                 command.add_argument("--" + path)
             command.add_argument("--executor", choices=("local", "lsf"))
+            command.add_argument(
+                "--profile", choices=PROFILE_NAMES, help="Benchmark profile (default: full)"
+            )
             command.add_argument("--seeds", type=int)
             command.add_argument("--master-seed", type=int)
             command.add_argument("--workers")
             command.add_argument("--native-threads", type=int)
             command.add_argument("--cpu-budget", type=float)
             command.add_argument("--memory-gb", type=float)
-            command.add_argument("--wall-seconds", type=float)
+            command.add_argument(
+                "--wall-seconds", type=float, help="Watchdog seconds (full: 3600, evolve: 900, small: 60)"
+            )
             command.add_argument("--worker-memory-gb", type=float)
             command.add_argument("--build-cpus", type=int)
             command.add_argument("--infrastructure-retries", type=int)
@@ -71,6 +77,7 @@ def parser():
         "audit", help="Audit the checked-in catalogue and optionally a pinned corpus mirror"
     )
     audit.add_argument("--corpus")
+    audit.add_argument("--profile", choices=PROFILE_NAMES, default="full")
     return root
 
 
@@ -128,16 +135,24 @@ def main(argv=None):
             from .weights import allocate_weights
 
             catalogue = load_catalogue()
-            main_candidates = [row for row in catalogue["candidates"] if row["category"] == "main"]
-            weights = allocate_weights(main_candidates)
+            manifest = load_profile(args.profile)
+            candidates = select_candidates(manifest, catalogue["candidates"])
+            main_candidates = [row for row in candidates if row["category"] == "main"]
+            weights = allocate_weights(
+                main_candidates, targets=manifest["targets"], levels=manifest["levels"]
+            )
             output = {
                 "schema_version": 1,
-                "candidate_count": len(catalogue["candidates"]),
+                "profile": args.profile,
+                "design": manifest["design"],
+                "profile_manifest_hash": canonical_hash(manifest),
+                "candidate_count": len(candidates),
                 "main_candidates": len(main_candidates),
                 "coverage_count": len(catalogue["coverage"]),
                 "catalogue_hash": canonical_hash(catalogue),
                 "revision": catalogue["revision"],
-                "expected_observations": 149 * 6 * 3 * 2,
+                "expected_observations": len(candidates)
+                * len(manifest["targets"]) * len(manifest["levels"]) * 3 * 2,
                 "planning_weights": weights["marginals"],
             }
             if args.corpus:

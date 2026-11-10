@@ -175,7 +175,13 @@ def harness_identity() -> str:
         if "__pycache__" not in path.parts
     }
     from .corpus import load_catalogue
+    from .profiles import load_profiles
 
     return canonical_hash(
-        {"schema_version": 1, "sources": sources, "catalogue": canonical_hash(load_catalogue())}
+        {
+            "schema_version": 1,
+            "sources": sources,
+            "catalogue": canonical_hash(load_catalogue()),
+            "profiles": canonical_hash(load_profiles()),
+        }
     )

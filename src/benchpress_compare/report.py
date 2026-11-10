@@ -247,12 +247,19 @@ def build_report(
     status_code = (
         execution.get("status", "UNKNOWN") if execution else status or plan.get("status", "UNKNOWN")
     )
+    design = plan.get(
+        "design", plan.get("config", {}).get("design", "benchpress-eight-family-v1")
+    )
     return {
         "schema_version": 1,
         "protocol": REPORT_PROTOCOL,
         "plan_hash": plan.get("plan_hash"),
-        "design": plan.get(
-            "design", plan.get("config", {}).get("design", "benchpress-eight-family-v1")
+        "profile": plan.get("profile", plan.get("config", {}).get("profile", "full")),
+        "profile_manifest_hash": plan.get("profile_manifest_hash"),
+        "design": design,
+        "score_scope": (
+            "subset_search_signal" if design in {"benchpress-evolve-v1", "benchpress-small-v1"}
+            else "smoke" if "smoke" in design else "benchmark"
         ),
         "status": status_code,
         "execution": execution,
@@ -266,6 +273,7 @@ def build_report(
                 "protocols",
                 "runtime_profiles",
                 "seed_algorithm",
+                "profile_manifest",
             )
         },
         "summary": summary,
@@ -334,6 +342,18 @@ def render_markdown(report: dict) -> str:
             "This is a smoke subset; it does not establish the complete eight-family score.",
             "",
         ]
+    elif report["design"] in {"benchpress-evolve-v1", "benchpress-small-v1"}:
+        lines += [
+            "This subset score is a search signal. Confirm any improvement on the full "
+            "profile before making a benchmark claim.",
+            "",
+        ]
+        if report["design"] == "benchpress-small-v1":
+            lines += [
+                "The small profile is a quick screening check with no large-band inputs; "
+                "evaluate passing candidates on the evolve profile.",
+                "",
+            ]
     admission = report.get("admission")
     if admission:
         lines += [

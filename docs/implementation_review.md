@@ -95,7 +95,29 @@ Screening must establish all 2,682 baseline observations before cohort freeze.
 | --- | --- | --- |
 | 1 | 1489599 | Preparation failed in dependency-resolution job 1489609: an `ibm-platform-services` source build lacked `pkg_resources` in its isolated build environment. No benchmark observations collected; no LSF jobs remained after failure. |
 | 2 | 1496106 | Both optimized source builds, all 149 fixtures, 15 target snapshots, and both import checks succeeded. Stopped all run-owned jobs when commit `c616d28` changed the contract; user confirmed the restart must use the updated plan. Evidence retained under `logs/superseded-run-002/`. |
-| 3 | 1500351 | Clean restart under user-confirmed `target-legality-v4` and `sabre-native-counts-v3`; in progress. Updated code passed 235 tests; subsequent wrapper-cleanup and report-scope fixes passed 42 focused tests, Ruff, and whitespace checks. |
+| 3 | 1500351 | Both builds and all preparation checks passed; 1,910 baseline preflight receipts succeeded before the account's 100 GiB disk quota was exhausted. All run-owned jobs stopped. Full failed-run evidence archived in `logs/failed-run-003.tar.gz`; observations are not accepted as a complete comparison. |
+| 4 | 1510642 | Clean restart with lossless compressed artifacts, automatic build-workspace cleanup, and measured disk forecasts; in progress. |
+
+The storage correction retains all evidence using deterministic, lossless gzip
+for the three large circuit JSON artifacts. Worker protocol
+`observation-worker-v2-gzip` prevents reuse of old uncompressed observations.
+Successful builds now remove only verified disposable compiler workspaces and
+download caches, with slow removal outside the lease fence. Planning now forecasts
+additional artifact storage from measured compressed baseline files and accounts
+for retained attempt, result, and baseline-cache copies. **253 tests passed**;
+Ruff and whitespace checks passed. A real 20.94 MiB output compressed to 1.22 MiB
+in 2.52 seconds and decompressed to the exact original bytes. Sampled dominant
+artifacts compressed to roughly 2–3% of their original size; the full restart
+still requires a fresh completed acceptance audit.
+
+The failed-run archive passed gzip integrity, complete file inventory, and 15,966
+recorded artifact-reference checks before the uncompressed tree was removed.
+Verification evidence is `logs/failed-run-003-verification.json`. Account usage
+fell to approximately 68 GiB of the 100 GiB hard quota before the next restart.
+During attempt 4, 750 obsolete attempt-3 cache entries were also verified against
+that archive and removed, reclaiming 4.18 GiB. Their original metadata, exact
+archive mappings, and deletion ledger are retained in `logs/failed-run-003-cache-*`.
+Current build/cache identities were excluded from that cleanup.
 
 Acceptance still requires verified actual source builds, completed baseline
 admission and pilot, a frozen valid cohort, all planned paired comparison

@@ -140,3 +140,30 @@ def test_launch_pins_harness_before_builds_and_rejects_drift(launch, monkeypatch
     with pytest.raises(CompareError, match="Coordinator implementation changed"):
         submit_controller(config)
     assert len(scheduler.submitted) == 1
+
+
+@pytest.mark.parametrize("name", ["evolve", "small"])
+def test_new_lsf_request_freezes_profile_before_snapshotting(launch, monkeypatch, name):
+    from dataclasses import replace
+    from benchpress_compare.identity import canonical_hash
+    from benchpress_compare.profiles import load_profile
+
+    root, cfg, _ = launch
+    (root / "request.json").unlink()
+    source = root.parent / "source"
+    source.mkdir()
+    (source / "pyproject.toml").write_text('[project]\nname="qiskit"\n')
+    cfg = replace(cfg, baseline=str(source), evolve=str(source), profile=name, wall_seconds=None)
+
+    def snapshot(config, destination):
+        request = read_json(destination / "request.json")
+        manifest = load_profile(name)
+        assert request["profile"] == name
+        assert request["design"] == manifest["design"]
+        assert request["profile_manifest"] == manifest
+        assert request["profile_manifest_hash"] == canonical_hash(manifest)
+        assert request["config"]["profile"] == name
+        return {}
+
+    monkeypatch.setattr("benchpress_compare.preparation._snapshot_paths", snapshot)
+    assert submit_controller(cfg)["status"] == "QUEUED"
