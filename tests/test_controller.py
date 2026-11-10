@@ -140,3 +140,14 @@ def test_follow_ignores_terminal_state_from_older_controller(launch, monkeypatch
     scheduler.site = type("Site", (), {"poll_seconds": 0.01})()
     assert follow_controller(config, {"submitted_at": 2}) == "COMPLETE"
     assert scheduler.polls == 1
+
+
+def test_launch_pins_harness_before_builds_and_rejects_drift(launch, monkeypatch):
+    root, config, scheduler = launch
+    monkeypatch.setattr("benchpress_compare.controller.harness_identity", lambda: "first")
+    submit_controller(config)
+    assert read_json(root / "request.json")["coordinator_hash"] == "first"
+    monkeypatch.setattr("benchpress_compare.controller.harness_identity", lambda: "changed")
+    with pytest.raises(CompareError, match="Coordinator implementation changed"):
+        submit_controller(config)
+    assert len(scheduler.submitted) == 1

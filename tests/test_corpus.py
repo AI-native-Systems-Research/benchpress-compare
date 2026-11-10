@@ -78,7 +78,8 @@ def test_dynamic_and_custom_definition_roundtrip():
     assert export_circuit(import_circuit(encoded)) == encoded
 
 
-def test_pauli_order_coefficients_and_synthesis_are_preserved():
+@pytest.mark.parametrize("preserve_order", [True, False])
+def test_pauli_order_coefficients_and_synthesis_are_preserved(preserve_order):
     qiskit = pytest.importorskip("qiskit")
     from qiskit.circuit.library import PauliEvolutionGate
     from qiskit.quantum_info import SparsePauliOp
@@ -90,12 +91,13 @@ def test_pauli_order_coefficients_and_synthesis_are_preserved():
         PauliEvolutionGate(
             SparsePauliOp.from_list([("ZZ", 0.7), ("XI", -0.31)]),
             time=1,
-            synthesis=LieTrotter(reps=1, preserve_order=True),
+            synthesis=LieTrotter(reps=1, preserve_order=preserve_order),
         ),
         [0, 1],
     )
     encoded = export_circuit(q)
     assert encoded["operations"][0]["groups"][0] == [["ZZ", 0.7, 0.0], ["XI", -0.31, 0.0]]
+    assert encoded["operations"][0]["synthesis"]["settings"]["preserve_order"] == preserve_order
     assert export_circuit(import_circuit(encoded)) == encoded
 
 

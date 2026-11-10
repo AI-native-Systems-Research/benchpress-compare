@@ -37,6 +37,35 @@ from .store import Lease, Store
 from .weights import WeightError, allocate_weights, assign_case_weights, audit_case_weights
 
 
+def _verify_harness_wheel(wheel):
+    """Compare packaged code and catalogue with the coordinator before reuse."""
+    import hashlib
+    import json
+    import zipfile
+
+    try:
+        with zipfile.ZipFile(wheel) as archive:
+            names = archive.namelist()
+            if len(names) != len(set(names)):
+                raise IntegrityError("Harness wheel contains duplicate members")
+            sources = {
+                name.removeprefix("benchpress_compare/"): hashlib.sha256(
+                    archive.read(name)
+                ).hexdigest()
+                for name in names
+                if name.startswith("benchpress_compare/") and name.endswith(".py")
+            }
+            catalogue = json.loads(archive.read("benchpress_compare/data/candidates.json"))
+    except (OSError, ValueError, KeyError, zipfile.BadZipFile) as exc:
+        raise IntegrityError(f"Cannot verify preparation harness wheel: {exc}") from exc
+    identity = canonical_hash(
+        {"schema_version": 1, "sources": sources, "catalogue": canonical_hash(catalogue)}
+    )
+    if identity != harness_identity():
+        raise IntegrityError("Preparation harness wheel differs from the running coordinator")
+    return wheel
+
+
 def _harness_wheel(destination):
     destination = Path(destination)
     destination.mkdir(parents=True, exist_ok=True)
@@ -44,7 +73,7 @@ def _harness_wheel(destination):
     if wheels:
         if len(wheels) != 1:
             raise IntegrityError("Ambiguous preparation harness wheel")
-        return wheels[0]
+        return _verify_harness_wheel(wheels[0])
     package_root = Path(__file__).resolve().parents[2]
     if not (package_root / "pyproject.toml").exists():
         # An installed wheel can be reconstructed from its installed distribution,
@@ -63,7 +92,7 @@ def _harness_wheel(destination):
                         and ".." not in Path(name).parts
                     ):
                         archive.write(distribution.locate_file(entry), name)
-        return wheel
+        return _verify_harness_wheel(wheel)
     env = dict(os.environ, UV_CACHE_DIR=str(destination / "uv-cache"))
     subprocess.run(
         ["uv", "build", "--wheel", "--out-dir", str(destination), str(package_root)],
@@ -75,7 +104,7 @@ def _harness_wheel(destination):
     wheels = list(destination.glob("benchpress_compare-*.whl"))
     if len(wheels) != 1:
         raise PreparationError("Could not prepare one pinned harness wheel")
-    return wheels[0]
+    return _verify_harness_wheel(wheels[0])
 
 
 def _corpus(config, root):
@@ -252,6 +281,7 @@ def _builds(engine, snapshots):
             {
                 "source": snapshot["tree_hash"],
                 "lock": common["requirements_hash"],
+                "build_constraints": common["build_constraints_hash"],
                 "harness": file_hash(wheel),
                 "platform": platform.platform(),
                 "python": file_hash(sys.executable),
@@ -292,7 +322,7 @@ def _builds(engine, snapshots):
 
 def _check_paired_builds(builds):
     baseline, evolve = builds["baseline"], builds["evolve"]
-    for field in ("dependencies", "harness", "python"):
+    for field in ("dependencies", "build_constraints", "harness", "python"):
         if baseline["request_identity"][field] != evolve["request_identity"][field]:
             raise PreparationError(f"Paired build {field} identities differ")
     for field in ("python", "implementation", "abi", "platform", "architecture", "libc", "os"):
@@ -405,17 +435,28 @@ def _revision_chain(root, parent_hash):
 def _request_config(root, config, continue_existing):
     request_path = root / "request.json"
     if request_path.exists():
-        saved = read_json(request_path)["config"]
+        request = read_json(request_path)
+        saved = request["config"]
+        pinned = request.get("coordinator_hash")
+        if pinned is None and (root / "preparation.json").exists():
+            pinned = read_json(root / "preparation.json").get("coordinator_hash")
+        if pinned is not None and pinned != harness_identity():
+            raise IntegrityError("Coordinator changed after the run request was frozen")
         if not continue_existing and saved != config.to_dict():
             raise CompareError(
                 "Existing results directory has an incompatible request; choose a new directory"
             )
+        if pinned is None:
+            atomic_write_json(request_path, {**request, "coordinator_hash": harness_identity()})
         return RunConfig(**saved)
     config.validate()
     allowed = {"state", "jobs", "logs", "snapshots", "preparation"}
     if any(path.name not in allowed for path in root.iterdir()):
         raise CompareError("New results directory must be empty")
-    atomic_write_json(request_path, {"schema_version": 1, "config": config.to_dict()})
+    atomic_write_json(
+        request_path,
+        {"schema_version": 1, "config": config.to_dict(), "coordinator_hash": harness_identity()},
+    )
     return config
 
 
@@ -576,10 +617,10 @@ def prepare(config: RunConfig, *, continue_existing=False, retry_cancelled=False
                 "transpile_contract": TRANSPILE_CONTRACT,
                 "validation_policy": {
                     "protocol": PROTOCOLS["validation"],
-                    "required": ["target_legality", "layout", "routing"],
-                    "disclosed": ["semantics"],
-                    "semantics": "bounded exact oracle; unsupported beyond its bounds is "
-                    "disclosed coverage, mismatch or error invalidates the observation",
+                    "required": ["target_legality", "layout", "routing", "semantics"],
+                    "disclosed": [],
+                    "semantics": "exact bounded oracle or verified compositional certificates; "
+                    "unsupported, mismatch or error invalidates the observation",
                     "embedding": {
                         "algorithm": "checked-cz-subgraph-v1",
                         "budget_seconds": 1.0,

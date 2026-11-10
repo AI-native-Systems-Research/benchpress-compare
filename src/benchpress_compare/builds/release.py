@@ -42,6 +42,35 @@ THREAD_ENVIRONMENT = {
     "PYTHONDONTWRITEBYTECODE": "1",
 }
 
+# Metadata preparation can build older candidate sdists even when the final
+# solution selects a newer wheel. Pin that isolated toolchain too: legacy IBM
+# SDK setup.py files import pkg_resources, removed by newer setuptools releases.
+# These versions also satisfy the supplied Qiskit sources' PEP 517 requirements.
+BUILD_DEPENDENCY_CONSTRAINTS = (
+    "semantic-version==2.10.0",
+    "setuptools==80.9.0",
+    "setuptools-rust==1.13.0",
+    "wheel==0.45.1",
+)
+
+
+def _build_constraints_bytes() -> bytes:
+    return ("\n".join(BUILD_DEPENDENCY_CONSTRAINTS) + "\n").encode()
+
+
+def _dependency_constraints(lock: dict | None) -> bytes:
+    """Read the frozen isolated-build policy, rejecting modified lock inputs."""
+    if lock is None:
+        return _build_constraints_bytes()
+    try:
+        path = Path(lock["build_constraints_path"])
+        expected = lock["build_constraints_hash"]
+    except KeyError as exc:
+        raise IntegrityError("Common dependency lock lacks pinned build constraints") from exc
+    if file_hash(path) != expected:
+        raise IntegrityError("Common build dependency constraints changed")
+    return path.read_bytes()
+
 
 def sanitized_environment(scratch: Path, extra: dict | None = None) -> dict[str, str]:
     scratch.mkdir(parents=True, exist_ok=True)
@@ -201,7 +230,9 @@ def resolve_common_dependencies(
     request = "\n".join(sorted(requirements)) + "\n"
     request_path = destination / "common.in"
     lock_path = destination / "common.requirements.txt"
+    constraints_path = destination / "build-constraints.txt"
     request_path.write_text(request)
+    constraints_path.write_bytes(_build_constraints_bytes())
     environment = sanitized_environment(destination / "scratch")
     command = [
         "uv",
@@ -210,6 +241,10 @@ def resolve_common_dependencies(
         "--python",
         str(python or sys.executable),
         "--generate-hashes",
+        "--constraints",
+        str(constraints_path),
+        "--build-constraints",
+        str(constraints_path),
         "--no-header",
         "--no-annotate",
         "--output-file",
@@ -221,7 +256,12 @@ def resolve_common_dependencies(
         "schema_version": 1,
         "requirements_path": str(lock_path),
         "requirements_hash": file_hash(lock_path),
-        "input_hash": canonical_hash(sorted(requirements)),
+        "build_constraints_path": str(constraints_path),
+        "build_constraints_hash": file_hash(constraints_path),
+        "input_hash": canonical_hash({
+            "requirements": sorted(requirements),
+            "build_constraints": list(BUILD_DEPENDENCY_CONSTRAINTS),
+        }),
         "backends": backends,
         "rust_toolchain": toolchains[0],
         "python": str(python or sys.executable),
@@ -429,6 +469,9 @@ def build_release(
     policy = release_policy(source, release_overrides)
     if dependency_lock is None or harness_wheel is None:
         raise PreparationError("A common dependency lock and a pinned harness wheel are required")
+    constraints = _dependency_constraints(
+        dependency_lock if isinstance(dependency_lock, dict) else None
+    )
     if isinstance(dependency_lock, dict):
         lock_info = dependency_lock
         dependency_lock = Path(lock_info["requirements_path"])
@@ -439,6 +482,7 @@ def build_release(
     requested_identity = {
         "tree_hash": snapshot["tree_hash"],
         "dependencies": file_hash(dependency_lock),
+        "build_constraints": hashlib.sha256(constraints).hexdigest(),
         "release": policy,
         "harness": file_hash(harness_wheel),
         "python": file_hash(python),
@@ -483,6 +527,7 @@ def build_release(
         log=destination / "logs" / "cc.log",
     )
     (destination / "common.requirements.txt").write_bytes(dependency_lock.read_bytes())
+    (destination / "build-constraints.txt").write_bytes(constraints)
     shutil.copyfile(harness_wheel, destination / harness_wheel.name)
     # Virtual environments cannot be moved after installation: entry-point
     # scripts contain the absolute interpreter path.
@@ -502,6 +547,8 @@ def build_release(
             "--python",
             str(env_python),
             "--require-hashes",
+            "--build-constraints",
+            str(destination / "build-constraints.txt"),
             str(destination / "common.requirements.txt"),
         ],
         cwd=destination,
@@ -571,6 +618,8 @@ def build_release(
             str(env_python),
             "--no-deps",
             "--reinstall",
+            "--build-constraints",
+            str(destination / "build-constraints.txt"),
             str(wheel),
             str(destination / harness_wheel.name),
         ],
@@ -634,6 +683,7 @@ def build_release(
             wheel,
             destination / harness_wheel.name,
             destination / "common.requirements.txt",
+            destination / "build-constraints.txt",
             script,
             *(destination / "logs").glob("*.log"),
         ]

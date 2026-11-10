@@ -195,10 +195,10 @@ class LSFExecutor:
                 argv.append("-json")
             else:
                 argv.append("-noheader")
-            if job_id:
-                argv.append(str(job_id))
-            elif name:
+            if name:
                 argv.extend(["-J", name])
+            elif job_id:
+                argv.append(str(job_id))
             timeout = 120
         try:
             result = self._command(argv, timeout=timeout)
@@ -212,11 +212,13 @@ class LSFExecutor:
 
     @staticmethod
     def _matches(job, rows):
+        named = [row for row in rows if row["name"] == job["name"]]
+        if len(named) > 1:
+            raise ReconciliationError(f"Conflicting duplicate scheduler jobs: {job['name']}")
         return [
             row
-            for row in rows
-            if row["name"] == job["name"]
-            and (not job.get("job_id") or row["job_id"] == job["job_id"])
+            for row in named
+            if not job.get("job_id") or row["job_id"] == job["job_id"]
         ]
 
     def _apply(self, job, row):
@@ -241,6 +243,9 @@ class LSFExecutor:
 
     def poll(self, job):
         job = dict(job)
+        if job["status"] in {"DONE", "EXIT"}:
+            # Durable terminal evidence does not expire with scheduler history.
+            return job
         try:
             rows = self.query(name=job["name"], job_id=job.get("job_id"))
             matches = self._matches(job, rows)
@@ -276,8 +281,17 @@ class LSFExecutor:
                 listing = None
         results = {}
         for token, job in jobs.items():
+            if job["status"] in {"DONE", "EXIT"}:
+                results[token] = job
+                continue
             if listing is not None:
-                matches = self._matches(job, listing)
+                try:
+                    matches = self._matches(job, listing)
+                except ReconciliationError as exc:
+                    results[token] = self._uncertain(
+                        {**job, "status": "SUBMISSION_UNKNOWN", "reason": str(exc)}
+                    )
+                    continue
                 if len(matches) == 1 and matches[0]["scheduler_state"] in ACTIVE | {"DONE", "EXIT"}:
                     results[token] = self._apply(job, matches[0])
                     continue
@@ -285,13 +299,31 @@ class LSFExecutor:
         return results
 
     def cancel(self, job):
-        if not job.get("job_id"):
-            job = self.poll(job)
-        if not job.get("job_id"):
+        if job["status"] in {"DONE", "EXIT"}:
+            return dict(job)
+        # Numeric IDs are recycled. History can establish that our old job
+        # finished, but only a current name/ID match authorizes killing it.
+        matches = self._matches(job, self.query(name=job["name"]))
+        if not matches:
+            reconciled = self.poll(job)
+            if reconciled["status"] in {"DONE", "EXIT"}:
+                return reconciled
             raise ReconciliationError(
-                "Cannot cancel an unlocated submission; reconcile its token first"
+                "Cannot cancel an unlocated submission; verify its current name and ID first"
             )
-        result = self._command([self.site.bkill, str(job["job_id"])])
+        job = self._apply(job, matches[0])
+        if job["status"] in {"DONE", "EXIT"}:
+            return job
+        try:
+            result = self._command([self.site.bkill, str(job["job_id"])])
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            raise ReconciliationError(f"Cancellation not confirmed: {exc}") from exc
         if result.returncode:
+            # A worker can finish between the listing and bkill. Confirm that
+            # terminal state rather than treating an already-finished job as a
+            # failed cancellation.
+            reconciled = self.poll(job)
+            if reconciled["status"] in {"DONE", "EXIT"}:
+                return reconciled
             raise ReconciliationError(f"Cancellation not confirmed: {result.stderr.strip()}")
         return {**job, "status": "CANCELLING"}

@@ -5,6 +5,18 @@ from __future__ import annotations
 from collections import defaultdict
 
 
+def _unsupported_conditions(circuit):
+    """The interchange supports classical conditions only on explicit branches."""
+    for op in circuit["operations"]:
+        if op.get("condition") and op.get("kind") != "if_else":
+            return True
+        if any(_unsupported_conditions(block) for block in op.get("blocks", [])):
+            return True
+        if op.get("definition") and _unsupported_conditions(op["definition"]):
+            return True
+    return False
+
+
 def instrument_equivalence(
     logical, output, initial, final, *, max_logical_qubits=4, max_physical_qubits=6
 ):
@@ -22,6 +34,8 @@ def instrument_equivalence(
         "max_logical_qubits": max_logical_qubits,
         "max_physical_qubits": max_physical_qubits,
     }
+    if _unsupported_conditions(logical) or _unsupported_conditions(output):
+        return {"status": "unsupported", "reason": "unsupported_classical_condition", "scope": scope}
     validation = layout_validation(initial, final, logical["num_qubits"], output["num_qubits"])
     if validation["status"] != "verified":
         return dict(validation, scope=scope)
@@ -72,15 +86,15 @@ def instrument_equivalence(
 
         def execute(body, states, qmap, cmap, width):
             for op in body["operations"]:
-                name = op["name"]
-                if name in {"barrier", "delay"}:
+                name, kind = op["name"], op.get("kind")
+                if kind in {"barrier", "delay"}:
                     continue
-                if name in {"while_loop", "for_loop", "switch_case", "box"}:
+                if op.get("blocks") and kind != "if_else":
                     raise NotImplementedError(f"Unsupported control flow {name}")
                 qs, cs = [qmap[q] for q in op["qargs"]], [cmap[c] for c in op["cargs"]]
                 evolved = defaultdict(lambda: np.zeros((2**width, 2**width), dtype=complex))
                 for classical, rho in states.items():
-                    if name == "if_else":
+                    if kind == "if_else":
                         condition = op["condition"]
                         value = sum(
                             ((classical >> cmap[c]) & 1) << i
@@ -94,7 +108,7 @@ def instrument_equivalence(
                         )
                         for bits, matrix in selected.items():
                             evolved[bits] += matrix
-                    elif name in {"measure", "reset"}:
+                    elif kind == "standard" and name in {"measure", "reset"}:
                         if len(qs) != 1:
                             raise ValueError("Non-unary measurement/reset")
                         q = qs[0]

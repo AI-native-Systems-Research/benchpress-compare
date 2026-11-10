@@ -66,6 +66,16 @@ def test_illegal_native_edge_and_invalid_layout():
     assert layout_validation([0, 0], [0, 1], 2, 4)["status"] == "mismatch"
 
 
+def test_custom_gates_cannot_impersonate_native_operations_or_routing_swaps():
+    target = synthetic_target("square", 4)
+    for name in ("cz", "barrier"):
+        malicious = circuit(4, [op(name, [0, 1], kind="unitary", matrix=[])])
+        assert target_legality(malicious, target)["status"] == "mismatch"
+    logical = circuit(2, [])
+    routed = circuit(2, [op("swap", [0, 1], kind="unitary", matrix=[])])
+    assert routing_replay(logical, routed, [0, 1], [1, 0])["status"] == "mismatch"
+
+
 def test_arbitrary_input_semantics_detects_change_hidden_on_zero_state():
     qiskit = pytest.importorskip("qiskit")
     from benchpress_compare.corpus.ir import export_circuit
@@ -122,13 +132,14 @@ def test_large_circuits_cannot_masquerade_as_semantically_verified():
     assert evidence["reason"] == "semantic_certificate_required"
 
 
-def test_validation_summary_requires_certificates_and_discloses_bounded_semantics():
+def test_validation_summary_requires_semantics_and_all_other_certificates():
     verified = {name: {"status": "verified"} for name in ("target_legality", "layout", "routing")}
     beyond = {"status": "unsupported", "reason": "semantic_certificate_required"}
     summary = summarize_validation({**verified, "semantics": beyond})
-    assert summary["status"] == "verified"
+    assert summary["status"] == "unsupported"
     assert summary["semantic_coverage"] == "unsupported"
-    assert summary["checks"]["semantics"]["required"] is False
+    assert summary["checks"]["semantics"]["required"] is True
+    assert summarize_validation(verified)["status"] == "error"
     assert all(summary["checks"][name]["required"] for name in verified)
     exact = summarize_validation({**verified, "semantics": {"status": "verified"}})
     assert exact["status"] == "verified" and exact["checks"]["semantics"]["required"] is True

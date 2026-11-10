@@ -11,10 +11,12 @@ from benchpress_compare.identity import atomic_write_json, canonical_hash, read_
 from benchpress_compare.preparation import (
     _checked_artifact,
     _check_paired_builds,
+    _harness_wheel,
     _revision_chain,
     _snapshot_paths,
     _structural_groups,
     _task,
+    _verify_harness_wheel,
     prepare,
 )
 from benchpress_compare.builds import snapshot_source
@@ -298,7 +300,9 @@ def test_build_pair_contract_rejects_toolchain_or_dependency_drift():
     baseline = {
         "attestation": attestation,
         "toolchain": {"rustc": "1"},
-        "request_identity": {key: "same" for key in ("dependencies", "harness", "python")},
+        "request_identity": {
+            key: "same" for key in ("dependencies", "build_constraints", "harness", "python")
+        },
     }
     evolve = deepcopy(baseline)
     evolve["attestation"]["dependencies"][0][1] = "2.2"
@@ -309,6 +313,10 @@ def test_build_pair_contract_rejects_toolchain_or_dependency_drift():
     evolve["toolchain"]["rustc"] = "1"
     evolve["attestation"]["dependencies"][1][1] = "2.3"
     with pytest.raises(PreparationError, match="dependency versions"):
+        _check_paired_builds({"baseline": baseline, "evolve": evolve})
+    evolve = deepcopy(baseline)
+    evolve["request_identity"]["build_constraints"] = "different"
+    with pytest.raises(PreparationError, match="build_constraints"):
         _check_paired_builds({"baseline": baseline, "evolve": evolve})
 
 
@@ -350,3 +358,44 @@ def test_task_identity_includes_limits_and_build_attestation(tmp_path):
     engine.builds["baseline"]["build_id"] = "binary"
     _task(engine, "validate-import", {"fixture_paths": []}, python="/env/bin/python")
     assert engine.specs[2]["build_id"] == "binary"
+
+
+def test_preparation_rejects_coordinator_changes_before_first_build(tmp_path, monkeypatch):
+    import benchpress_compare.preparation as module
+
+    cfg = config(tmp_path).validate()
+    root = Path(cfg.results_root)
+    root.mkdir()
+    module._request_config(root, cfg, False)
+    monkeypatch.setattr(module, "harness_identity", lambda: "changed-after-submission")
+    with pytest.raises(IntegrityError, match="Coordinator changed"):
+        prepare(cfg, continue_existing=True)
+    assert not (root / "snapshots").exists()
+
+
+def test_cached_harness_wheel_must_match_actual_coordinator(tmp_path):
+    import json
+    import zipfile
+    import benchpress_compare
+    from benchpress_compare.corpus import load_catalogue
+
+    package = Path(benchpress_compare.__file__).parent
+    wheel = tmp_path / "benchpress_compare-0.1.0-py3-none-any.whl"
+
+    def write_wheel(*, corrupt=False):
+        with zipfile.ZipFile(wheel, "w") as archive:
+            for path in package.rglob("*.py"):
+                if "__pycache__" in path.parts:
+                    continue
+                content = path.read_bytes()
+                if corrupt and path.name == "preparation.py":
+                    content += b"\n# stale implementation\n"
+                archive.writestr("benchpress_compare/" + path.relative_to(package).as_posix(), content)
+            archive.writestr("benchpress_compare/data/candidates.json", json.dumps(load_catalogue()))
+
+    write_wheel()
+    assert _verify_harness_wheel(wheel) == wheel
+    assert _harness_wheel(tmp_path) == wheel
+    write_wheel(corrupt=True)
+    with pytest.raises(IntegrityError, match="differs from the running coordinator"):
+        _harness_wheel(tmp_path)

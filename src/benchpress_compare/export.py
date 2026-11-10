@@ -126,16 +126,30 @@ def export_run(root, output):
                     _reference(source, store, references)
                 elif not source.resolve().is_relative_to(root):
                     raise IntegrityError("Evolved snapshot lies outside the comparison")
-        for manifest_path in [root / "builds/baseline.json", root / "builds/evolve/manifest.json"]:
-            if manifest_path.exists():
-                record = read_json(manifest_path)
-                build = Path(record["manifest_path"]).parent.resolve()
-                verify_build(build)
-                excluded.add(build / "env")
-                if manifest_path.name == "baseline.json":
-                    _reference(build, store, references)
-                elif not build.is_relative_to(root):
-                    raise IntegrityError("Evolved build lies outside the comparison")
+        manifests_path = root / "builds/manifests.json"
+        if manifests_path.exists():
+            builds = read_json(manifests_path)["builds"]
+        else:
+            # Support preparation archives predating the paired-build manifest.
+            builds = {
+                arm: read_json(path)
+                for arm, path in (
+                    ("baseline", root / "builds/baseline.json"),
+                    ("evolve", root / "builds/evolve/manifest.json"),
+                )
+                if path.exists()
+            }
+        for arm, record in builds.items():
+            if arm not in {"baseline", "evolve"}:
+                raise IntegrityError(f"Unknown build arm in export: {arm}")
+            build = Path(record["manifest_path"]).parent.resolve()
+            if verify_build(build) != record:
+                raise IntegrityError(f"{arm} build differs from its saved manifest")
+            excluded.add(build / "env")
+            if arm == "baseline":
+                _reference(build, store, references)
+            elif not build.is_relative_to(root):
+                raise IntegrityError("Evolved build lies outside the comparison")
         # Every accepted result is checked, including preparation and pilot data.
         for parent in [
             root / "observations",

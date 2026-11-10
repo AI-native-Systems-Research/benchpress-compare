@@ -10,9 +10,9 @@ from .errors import IntegrityError
 VERSION = 1
 PROTOCOLS = {
     "worker": "observation-worker-v1",
-    "instrumentation": "sabre-native-call-v1",
+    "instrumentation": "sabre-native-compositional-v2",
     "metric": "native-n2-weighted-d2-v1",
-    "validation": "legality-routing-bounded-semantics-v2",
+    "validation": "legality-routing-compositional-semantics-v3",
     "target": "directed-target-v1",
     "fixture": "bound-logical-ir-v1",
     "identity": "canonical-json-v1",
@@ -21,6 +21,9 @@ TRANSPILE_CONTRACT = {
     "levels": [2, 3],
     "approximation_degree": 1.0,
     "initial_layout": None,
+    # Match the frozen fixtures' arbitrary logical-input semantics. Clean
+    # ancillas introduced by the compiler remain zero initialized.
+    "qubits_initially_zero": False,
     "layout_trials": 20,
     "layout_swap_trials": 20,
     "routing_trials": 20,

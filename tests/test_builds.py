@@ -5,7 +5,13 @@ import subprocess
 import pytest
 
 from benchpress_compare.builds import release_policy, snapshot_source, verify_snapshot
-from benchpress_compare.builds.release import _requirements, binary_identity, sanitized_environment
+from benchpress_compare.builds.release import (
+    _dependency_constraints,
+    _requirements,
+    binary_identity,
+    resolve_common_dependencies,
+    sanitized_environment,
+)
 from benchpress_compare.errors import IntegrityError, PreparationError
 
 
@@ -187,3 +193,38 @@ def test_observation_build_identity_includes_actual_wheel_and_native_binaries():
     assert first != binary_identity(
         "same-input-build-key", "wheel-one", {"qiskit/_accelerate.so": "native-two"}
     )
+
+
+def test_common_resolution_pins_both_installed_and_isolated_build_toolchains(tmp_path, monkeypatch):
+    from benchpress_compare.identity import file_hash
+
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "pyproject.toml").write_text(
+        '[build-system]\nrequires = ["setuptools>=77", "setuptools-rust>=1.13"]\n'
+        'build-backend = "setuptools.build_meta"\n'
+    )
+    observed = {}
+
+    def resolve(command, **kwargs):
+        assert "--no-build-isolation" not in command
+        installed = Path(command[command.index("--constraints") + 1])
+        isolated = Path(command[command.index("--build-constraints") + 1])
+        assert installed.read_bytes() == isolated.read_bytes()
+        assert "setuptools==80.9.0" in isolated.read_text()
+        assert "setuptools-rust==1.13.0" in installed.read_text()
+        observed["constraints"] = isolated
+        Path(command[command.index("--output-file") + 1]).write_text("setuptools==80.9.0\n")
+
+    monkeypatch.setattr("benchpress_compare.builds.release._run", resolve)
+    lock = resolve_common_dependencies([source, source], tmp_path / "dependencies")
+    assert lock["build_constraints_hash"] == file_hash(observed["constraints"])
+    assert _dependency_constraints(lock) == observed["constraints"].read_bytes()
+    observed["constraints"].write_text("setuptools==84.2.1\n")
+    with pytest.raises(IntegrityError, match="constraints changed"):
+        _dependency_constraints(lock)
+
+
+def test_old_lock_cannot_silently_select_a_new_isolated_toolchain():
+    with pytest.raises(IntegrityError, match="lacks pinned build constraints"):
+        _dependency_constraints({"requirements_path": "old-lock.txt"})

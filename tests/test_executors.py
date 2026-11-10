@@ -205,8 +205,54 @@ def test_poll_many_uses_one_listing_and_reconciles_absent_jobs_individually():
         "c": {"name": "bpc-run-c", "token": "c", "status": "QUEUED", "job_id": "3"},
     }
     polled = executor.poll_many(jobs)
-    assert polled["a"]["status"] == "RUNNING"
+    assert polled["a"]["status"] == "SUBMISSION_UNKNOWN"
+    assert "Conflicting duplicate" in polled["a"]["reason"]
     assert polled["b"]["status"] == "DONE"
     assert polled["c"]["status"] == "SUBMISSION_UNKNOWN"
     listings = [argv for argv in commands if argv[0] == "bjobs" and argv[-1] == "bpc-run-*"]
     assert len(listings) == 1
+
+
+def test_cancel_never_kills_a_recycled_numeric_id():
+    commands = []
+
+    def runner(argv, **kwargs):
+        commands.append(argv)
+        if argv[0] == "bjobs":
+            return subprocess.CompletedProcess(
+                argv, 0, "42 RUN somebody-elses-job", ""
+            )
+        return subprocess.CompletedProcess(argv, 0, "", "")
+
+    executor = LSFExecutor(SiteConfig(queue="test", machine_readable=False), runner)
+    job = {"name": "our-job", "job_id": "42", "status": "RUNNING", "token": "t"}
+    from benchpress_compare.errors import ReconciliationError
+
+    with pytest.raises(ReconciliationError, match="current name and ID"):
+        executor.cancel(job)
+    assert not any(argv[0] == "bkill" for argv in commands)
+
+
+def test_cancel_adopts_lost_reply_and_verifies_current_identity():
+    commands = []
+
+    def runner(argv, **kwargs):
+        commands.append(argv)
+        return subprocess.CompletedProcess(
+            argv, 0, "42 RUN our-job" if argv[0] == "bjobs" else "", ""
+        )
+
+    executor = LSFExecutor(SiteConfig(queue="test", machine_readable=False), runner)
+    job = executor.cancel({"name": "our-job", "status": "SUBMISSION_UNKNOWN", "token": "t"})
+    assert job["status"] == "CANCELLING"
+    assert commands[-1] == ["bkill", "42"]
+
+
+def test_terminal_evidence_survives_history_expiry():
+    def runner(*args, **kwargs):
+        raise AssertionError("Durable terminal evidence needs no scheduler query")
+
+    executor = LSFExecutor(SiteConfig(queue="test"), runner)
+    job = {"name": "old-job", "job_id": "42", "status": "EXIT", "token": "t"}
+    assert executor.poll(job) == job
+    assert executor.cancel(job) == job

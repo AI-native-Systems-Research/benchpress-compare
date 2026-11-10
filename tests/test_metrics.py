@@ -29,6 +29,16 @@ def test_barrier_orders_without_counting():
     assert (value["N2"], value["D2"]) == (2, 2)
 
 
+def test_operation_names_do_not_conceal_custom_gate_work():
+    body = circuit(2, [op("barrier", (0, 1), kind="unitary")])
+    assert active_qubits(body) == {0, 1}
+    assert len(structural_signature(body)) == 1
+    with pytest.raises(UnsupportedMetric):
+        measure(body)
+    with pytest.raises(UnsupportedMetric):
+        measure(circuit(2, [op("cz", (0, 1), kind="unitary")]))
+
+
 def test_recursive_size_counts_both_branches_depth_uses_maximum():
     true = circuit(3, [op("cz", (0, 1)), op("cz", (1, 2))], 1)
     false = circuit(3, [op("cz", (0, 2))], 1)

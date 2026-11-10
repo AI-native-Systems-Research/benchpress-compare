@@ -9,11 +9,11 @@ Qiskit; each measurement uses the selected build's isolated worker environment.
 **Implementation status:** this repository contains the package, local and LSF
 execution adapters, durable storage, scientific calculations, reports, and tests.
 The frozen validation contract requires verified native legality, layout
-validity and exact routing replay for every accepted observation. The exact
-semantic oracle is bounded to small circuits and is **disclosed coverage**:
-larger circuits record `unsupported: semantic_certificate_required` beside their
-scores, which is not verified equivalence, while a semantic `mismatch` or `error`
-still invalidates the observation. See
+validity, exact routing replay and semantic equivalence for every accepted
+observation. Semantics must be established by an exact bounded oracle or verified
+compositional certificates covering the compiler transformations. Unsupported,
+mismatching or erroneous semantic evidence cannot satisfy admission or collection.
+See
 [validation coverage](docs/validation_coverage.md) and the
 [implementation plan](docs/design/implementation_plan.md).
 
@@ -68,8 +68,8 @@ uv run benchpress-compare run --results-root /benchmarks/results/change-001
 
 `run` with all four paths prepares and collects in one invocation. `prepare`
 stops at final plan publication when admission, pilot, and freeze gates pass.
-The validation limitation above currently prevents a normal full-corpus freeze;
-diagnostic preparation artifacts remain available. `--accept-unresolved` records
+Every required validation certificate must pass before a normal full-corpus freeze;
+diagnostic preparation artifacts remain available for failures. `--accept-unresolved` records
 an explicit conditional cohort decision, but does not make unsupported validation
 pass or create missing families. A smoke subset selected by repeated
 `--smoke INPUT_ID` arguments is labelled separately and cannot claim the standard
@@ -83,6 +83,10 @@ of redistributing weight. Both arms use the same
 frozen observation profile. A zero-capacity allocation is an error. Successful
 baseline evidence can be reused only when build, input, target, seed, phase,
 protocols, and runtime identities agree.
+
+The full presets explicitly use `qubits_initially_zero=False` in both arms,
+matching the fixtures' arbitrary logical-input contract. Compiler-added ancillas
+remain zero initialized. This setting is frozen into case and cache identities.
 
 ## Resume, report, and export
 
@@ -173,7 +177,8 @@ Recorded checks against Qiskit 2.5.2 and the pinned Benchpress revision include:
 - [Dynamic validation spike](data/validation_feasibility.json): `cc_n12`,
   `qec9xz_n17`, and `seca_n11` compiled on the square target at L2 with verified
   native metrics, target/layout checks, and routing replay. Their required
-  end-to-end semantic checks remain unsupported, so the observations are invalid.
+  end-to-end semantic checks were unsupported in that recorded spike, so those
+  observations remain invalid and are not acceptance evidence for the current protocol.
 - [Worker integration tests](tests/test_worker.py): bounded real A/A observations
   execute both arms independently, preserve committed work on resume, and reuse
   only baseline observations in a subsequent run.
@@ -181,8 +186,8 @@ Recorded checks against Qiskit 2.5.2 and the pinned Benchpress revision include:
 The adapted Summit fixture recipes retain Benchpress provenance and its
 [Apache 2.0 license](data/LICENSE-BENCHPRESS.txt), also included in the package.
 
-Outstanding gates are scalable semantic certificates for required large/dynamic
-fixtures, verification against the actual supplied source versions, real-site LSF
+Outstanding gates are full-corpus verification of semantic certificates for
+large/dynamic fixtures, verification against the actual supplied source versions, real-site LSF
 and shared-filesystem checks, full baseline admission/pilot, and a real frozen
 cohort A/A rehearsal with independent evolve observations. Test success alone is
 not evidence that those gates passed.

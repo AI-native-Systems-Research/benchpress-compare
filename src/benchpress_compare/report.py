@@ -348,8 +348,8 @@ def render_markdown(report: dict) -> str:
         "",
         f"Required certificates: `{_escape(json.dumps(report['validation_coverage'].get('required_checks', []), sort_keys=True))}`. "
         f"Semantic oracle coverage: `{_escape(json.dumps(report['validation_coverage'].get('semantics', {}).get('statuses', {}), sort_keys=True))}`. "
-        "Observations without `verified` semantics are certified by legality, layout and exact routing replay only; "
-        "this is not a proof of full equivalence.",
+        "Every accepted observation requires verified semantics in addition to legality, layout and routing. "
+        "Unsupported semantic evidence cannot satisfy the frozen validation contract.",
         "",
     ]
     if report.get("coverage"):

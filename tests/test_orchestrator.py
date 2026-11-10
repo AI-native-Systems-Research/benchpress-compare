@@ -11,7 +11,7 @@ from benchpress_compare.errors import IntegrityError, PreparationError, Reconcil
 from benchpress_compare.executors.local import LocalExecutor, matching_process
 from benchpress_compare.executors.lsf import LSFExecutor
 from benchpress_compare.identity import atomic_write_json, canonical_hash, read_json
-from benchpress_compare.orchestrator import ExecutionEngine, read_results, work_key
+from benchpress_compare.orchestrator import ExecutionEngine, cancel, read_results, work_key
 from benchpress_compare.pilot import runtime_profile
 from benchpress_compare.schema import PROTOCOLS
 from benchpress_compare.store import Lease
@@ -476,3 +476,61 @@ def test_success_summary_without_required_checks_cannot_be_committed(setup):
         with pytest.raises(IntegrityError, match="required validation"):
             engine._commit(spec, attempt, result)
     assert read_results(root) == []
+
+
+def test_cancel_includes_pending_controller_and_continues_past_uncertain_jobs(setup, monkeypatch):
+    root, config, _ = setup()
+    atomic_write_json(root / "request.json", {"schema_version": 1, "config": config.to_dict()})
+    cancelled = []
+
+    class Executor:
+        def cancel(self, job):
+            cancelled.append(job["name"])
+            if job["name"] == "uncertain":
+                raise ReconciliationError("scheduler cannot locate this job")
+            return {**job, "status": "CANCELLING"}
+
+    monkeypatch.setattr("benchpress_compare.orchestrator.LSFExecutor", lambda *_: Executor())
+
+    def job(name, job_id):
+        return {
+            "name": name, "token": name, "job_id": job_id,
+            "status": "QUEUED", "executor": "lsf", "site": {"queue": "test"},
+        }
+
+    atomic_write_json(root / "jobs/controller.json", job("controller", "1"))
+    for name, job_id in (("uncertain", "2"), ("worker", "3")):
+        atomic_write_json(
+            root / "attempts" / name / "attempt/attempt.json",
+            {"status": "QUEUED", "job": job(name, job_id)},
+        )
+    with pytest.raises(ReconciliationError, match="Cancellation requested for 2 jobs"):
+        cancel(root)
+    assert cancelled == ["controller", "uncertain", "worker"]
+    assert (root / "state/cancel-request.json").is_file()
+
+
+def test_cancel_recovers_shard_job_saved_before_attempt_update(setup, monkeypatch):
+    root, config, _ = setup()
+    atomic_write_json(root / "request.json", {"schema_version": 1, "config": config.to_dict()})
+    cancelled = []
+
+    class Executor:
+        def cancel(self, job):
+            cancelled.append(job["job_id"])
+            return {**job, "status": "CANCELLING"}
+
+    monkeypatch.setattr("benchpress_compare.orchestrator.LSFExecutor", lambda *_: Executor())
+    shard = root / "jobs/shards/shared"
+    atomic_write_json(shard / "job.json", {
+        "name": "shard", "token": "shared", "job_id": "42", "status": "QUEUED",
+        "executor": "lsf", "site": {"queue": "test"},
+    })
+    for name in ("a", "b"):
+        directory = root / "attempts" / name / "attempt"
+        atomic_write_json(directory / "attempt.json", {
+            "status": "SUBMITTING", "submission_token": "shared",
+            "directory": str(directory), "shard_directory": str(shard),
+        })
+    assert cancel(root)["jobs"] == ["42"]
+    assert cancelled == ["42"]

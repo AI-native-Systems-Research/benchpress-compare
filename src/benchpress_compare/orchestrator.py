@@ -526,6 +526,8 @@ class ExecutionEngine:
                 )
                 job_count = len(owned_jobs)
                 for spec in list(pending):
+                    if (self.root / "state/cancel-request.json").exists():
+                        break
                     if spec not in pending:
                         continue
                     profile = spec["runtime_profile"]
@@ -747,25 +749,54 @@ def cancel(root):
     atomic_write_json(
         root / "state/cancel-request.json", {"schema_version": 1, "requested_at": time.time()}
     )
-    cancelled = []
+    cancelled, errors = [], []
     owned = set()
+
+    def cancel_job(job):
+        if job["token"] in owned:
+            return
+        owned.add(job["token"])
+        if job["status"] in {"DONE", "EXIT", "CANCELLED"}:
+            return
+        executor = (
+            LocalExecutor()
+            if job["executor"] == "local"
+            else LSFExecutor(SiteConfig(**job["site"]))
+        )
+        try:
+            result = executor.cancel(job)
+        except ReconciliationError as exc:
+            # An uncertain job must not prevent cancellation of the other
+            # known jobs owned by this run.
+            errors.append(f"{job['name']}: {exc}")
+            return
+        if result["status"] not in {"DONE", "EXIT"}:
+            cancelled.append(result.get("job_id", result.get("pid")))
+
+    # Stop dispatch before cancelling workers. The controller may still be
+    # pending, in which case it has no observation attempts to discover below.
+    controller_paths = [root / "jobs/controller.json"]
+    controller_paths.extend(sorted((root / "jobs/controllers").glob("*/job.json")))
+    for path in controller_paths:
+        if path.exists():
+            cancel_job(read_json(path))
     for path in sorted((root / "attempts").glob("*/*/attempt.json")):
         attempt = read_json(path)
         if attempt["status"] in TERMINAL | {"INTERRUPTED", "SUPERSEDED"}:
             continue
         job = attempt.get("job")
         if not job:
-            raise ReconciliationError(
-                "A submission intent needs reconciliation before cancellation"
-            )
-        if job["token"] in owned:
-            continue
-        executor = (
-            LocalExecutor()
-            if job["executor"] == "local"
-            else LSFExecutor(SiteConfig(**job["site"]))
+            # The scheduler reply may have been saved just before the
+            # controller died without attaching it to each shard member.
+            job_path = Path(attempt.get("shard_directory", attempt["directory"])) / "job.json"
+            if job_path.exists():
+                job = read_json(job_path)
+            else:
+                errors.append(f"Unlocated submission intent: {attempt['submission_token']}")
+                continue
+        cancel_job(job)
+    if errors:
+        raise ReconciliationError(
+            f"Cancellation requested for {len(cancelled)} jobs; unresolved: " + "; ".join(errors)
         )
-        executor.cancel(job)
-        owned.add(job["token"])
-        cancelled.append(job.get("job_id", job.get("pid")))
     return {"schema_version": 1, "status": "CANCELLATION_REQUESTED", "jobs": cancelled}

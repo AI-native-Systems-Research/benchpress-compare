@@ -102,3 +102,39 @@ def test_export_rejects_destination_inside_run(comparison):
     root, _ = comparison
     with pytest.raises(CompareError, match="outside"):
         export_run(root, root / "export.tar")
+
+
+def test_export_uses_paired_build_references_and_excludes_both_environments(
+    comparison, tmp_path, monkeypatch
+):
+    root, store = comparison
+    baseline = store.path("baseline/wheels", "abc")
+    evolve = root / "builds/evolve/def"
+    interpreter = tmp_path / "python"
+    interpreter.write_bytes(b"external interpreter")
+    builds = {}
+    for arm, directory in (("baseline", baseline), ("evolve", evolve)):
+        (directory / "env/bin").mkdir(parents=True)
+        (directory / "env/bin/python").symlink_to(interpreter)
+        (directory / "release.whl").write_bytes(arm.encode())
+        builds[arm] = {"schema_version": 1, "manifest_path": str(directory / "manifest.json")}
+        atomic_write_json(directory / "manifest.json", builds[arm])
+    atomic_write_json(root / "builds/manifests.json", {"schema_version": 1, "builds": builds})
+    checked = []
+
+    def verify(directory):
+        checked.append(directory)
+        return json.loads((directory / "manifest.json").read_text())
+
+    monkeypatch.setattr("benchpress_compare.export.verify_build", verify)
+    result = export_run(root, tmp_path / "builds.tar")
+    assert checked == [baseline, evolve]
+    with tarfile.open(result["path"]) as archive:
+        names = set(archive.getnames())
+        assert "shared-store/baseline/wheels/abc/release.whl" in names
+        assert "results/builds/evolve/def/release.whl" in names
+        assert not any("/env" in name for name in names)
+        metadata = json.load(archive.extractfile("export.json"))
+        assert metadata["excluded_environments"] == sorted(
+            [str(baseline / "env"), str(evolve / "env")]
+        )

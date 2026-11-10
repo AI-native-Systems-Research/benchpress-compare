@@ -11,7 +11,7 @@ from benchpress_compare.identity import canonical_hash
 from benchpress_compare.metrics import structural_signature
 from benchpress_compare.validation import routing_replay
 
-INSTRUMENTATION_PROTOCOL = "sabre-native-call-v1"
+INSTRUMENTATION_PROTOCOL = "sabre-native-compositional-v2"
 
 
 class AdapterIncompatible(RuntimeError):
@@ -32,7 +32,8 @@ def preset(target, level, seed):
     if level not in (2, 3):
         raise ValueError("The standard design supports optimization levels 2 and 3")
     manager = generate_preset_pass_manager(
-        optimization_level=level, target=target, seed_transpiler=seed, approximation_degree=1.0
+        optimization_level=level, target=target, seed_transpiler=seed, approximation_degree=1.0,
+        qubits_initially_zero=False,
     )
     configured = []
     for pass_ in _passes(manager.to_flow_controller()):
@@ -61,7 +62,7 @@ def preset(target, level, seed):
 
 
 @contextmanager
-def native_instrumentation(diagnostics: dict, artifacts: dict):
+def native_instrumentation(diagnostics: dict, artifacts: dict, native_start_source: dict):
     """Inspect actual native calls, not just configurable Python attributes.
 
     A build with a changed native-call ABI is a declared adapter incompatibility.
@@ -115,6 +116,15 @@ def native_instrumentation(diagnostics: dict, artifacts: dict):
                 "partial_start_count": len(bound.arguments.get("partial_layouts", [])),
                 "skip_routing": bound.arguments.get("skip_routing", False),
             }
+            if __name == "sabre_layout_and_routing":
+                from .starts import native_start_templates
+
+                starts = native_start_templates(
+                    bound.arguments["target"], before_qubits, bound.arguments, native_start_source
+                )
+                if native_start_source.get("status") != "not_requested" and starts["status"] != "verified":
+                    raise AdapterIncompatible(f"Cannot attest effective SABRE starting layouts: {starts}")
+                native["starting_layouts"] = starts
             result = __function(*args, **kwargs)
             index = len(diagnostics["native_calls"])
             if __name == "sabre_layout_and_routing":
@@ -155,11 +165,17 @@ def native_instrumentation(diagnostics: dict, artifacts: dict):
             setattr(module, name, original)
 
 
-def compile_observation(circuit, target, level, seed):
+def compile_observation(circuit, target, level, seed, *, native_start_source=None):
     from qiskit.converters import dag_to_circuit
+    from benchpress_compare.validation.passes import PassCertificates
 
     manager, configured = preset(target, level, seed)
     original = export_circuit(circuit)
+    native_start_source = native_start_source or {
+        "status": "not_requested", "reason": "no_attested_source_build"
+    }
+    if native_start_source.get("status") not in {"verified", "not_requested"}:
+        raise AdapterIncompatible(f"Cannot attest SABRE starting-layout policy: {native_start_source}")
 
     def original_swaps(body):
         return sum(
@@ -170,6 +186,7 @@ def compile_observation(circuit, target, level, seed):
     diagnostics = {
         "schema_version": 1,
         "protocol": INSTRUMENTATION_PROTOCOL,
+        "qubits_initially_zero": False,
         "configured_passes": configured,
         "native_calls": [],
         "passes": [],
@@ -179,6 +196,7 @@ def compile_observation(circuit, target, level, seed):
         "elided_permutations": [],
     }
     artifacts = {}
+    certificates = PassCertificates(circuit, diagnostics, artifacts)
     stage_map = {}
     for stage in manager.expanded_stages:
         stage_manager = getattr(manager, stage)
@@ -191,6 +209,7 @@ def compile_observation(circuit, target, level, seed):
         name = type(pass_).__name__
         stage = stage_map.get(id(pass_))
         diagnostics["passes"].append({"name": name, "stage": stage, "seconds": kwargs.get("time")})
+        certificates.observe(pass_, dag, kwargs["property_set"])
         if name in {"SabreLayout", "SabreSwap"}:
             diagnostics["sabre_executed"] = True
         if stage == "init":
@@ -221,8 +240,9 @@ def compile_observation(circuit, target, level, seed):
                     }
                 )
 
-    with native_instrumentation(diagnostics, artifacts):
+    with native_instrumentation(diagnostics, artifacts, native_start_source):
         output = manager.run(circuit, callback=callback)
+    diagnostics["semantic_certificate"] = certificates.finish(output)
     replay = [call["replay"] for call in diagnostics["native_calls"] if "replay" in call]
     if diagnostics["sabre_executed"] and not diagnostics["native_calls"]:
         raise AdapterIncompatible("Executed SABRE pass did not enter an attested native boundary")

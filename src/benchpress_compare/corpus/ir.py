@@ -98,6 +98,10 @@ def export_circuit(circuit) -> dict:
             if type(synthesis).__name__ not in {"LieTrotter", "SuzukiTrotter"}:
                 raise UnsupportedCircuit("Unknown Pauli evolution synthesis policy")
             settings = dict(synthesis.settings)
+            # Some supported Qiskit versions omit this effective setting from
+            # LieTrotter.settings; reconstructing it with the default can reorder
+            # a user-supplied product formula.
+            settings["preserve_order"] = bool(synthesis.preserve_order)
             if settings.get("atomic_evolution") is not None:
                 raise UnsupportedCircuit("Custom evolution callback cannot be frozen")
             desc.update(

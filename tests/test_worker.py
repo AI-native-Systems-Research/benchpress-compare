@@ -147,6 +147,36 @@ def test_attempt_receipt_is_immutable(tmp_path):
         run_spec({"output_dir": str(tmp_path)})
 
 
+def test_exact_output_equality_cannot_hide_a_conclusive_failed_pass_certificate(tmp_path, monkeypatch):
+    qiskit = pytest.importorskip("qiskit")
+    from benchpress_compare.corpus.ir import export_circuit
+    from benchpress_compare.targets import synthetic_target
+    from benchpress_compare.worker import _run_task
+
+    original = qiskit.QuantumCircuit(2)
+    original.h(0)
+    encoded = export_circuit(original)
+    atomic_write_json(tmp_path / "fixture.json", {
+        "schema_version": 1, "logical": encoded, "fixture_hash": canonical_hash(encoded),
+    })
+    atomic_write_json(tmp_path / "target.json", synthetic_target("square", 2))
+    monkeypatch.setattr(
+        "benchpress_compare.worker.adapter.compile_observation",
+        lambda *args, **kwargs: (original, {
+            "routing_replay": {"status": "verified"},
+            "semantic_certificate": {"status": "mismatch", "reason": "wrong_reported_layout"},
+        }, {}),
+    )
+    result, _ = _run_task({
+        "fixture_path": str(tmp_path / "fixture.json"),
+        "target_path": str(tmp_path / "target.json"), "level": 2, "seed": 1,
+    }, tmp_path)
+    assert result["status"] == "INVALID"
+    semantics = result["validation"]["checks"]["semantics"]
+    assert semantics["status"] == "mismatch"
+    assert semantics["bounded_oracle"]["status"] == "verified"
+
+
 def test_runtime_attestation_checks_host_abi_and_machine(tmp_path):
     qiskit = pytest.importorskip("qiskit")
     import importlib.metadata

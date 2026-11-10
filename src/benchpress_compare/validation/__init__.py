@@ -8,22 +8,21 @@ from copy import deepcopy
 from benchpress_compare.metrics import validate_circuit
 from benchpress_compare.targets import validate_target
 
-VALIDATION_PROTOCOL = "legality-routing-bounded-semantics-v2"
+VALIDATION_PROTOCOL = "legality-routing-compositional-semantics-v3"
 # Required certificates: recursive native legality, injective layouts and exact
-# routing replay at every executed SABRE boundary. The bounded semantic oracle is
-# disclosed coverage: exact where tractable, otherwise "unsupported" is recorded
-# beside the scores and never presented as verified equivalence.
-REQUIRED_CHECKS = ("target_legality", "layout", "routing")
-DISCLOSED_CHECKS = ("semantics",)
+# routing replay at every executed SABRE boundary, and semantic equivalence.
+# A bounded oracle or a verified compositional certificate may establish the
+# semantic check; exceeding either supported scope never satisfies the gate.
+REQUIRED_CHECKS = ("target_legality", "layout", "routing", "semantics")
+DISCLOSED_CHECKS = ()
 
 
 def summarize_validation(checks: dict) -> dict:
     """Combine check evidence under the frozen contract.
 
-    Every required check must be ``verified``. A disclosed check is required only
-    when it reached a conclusion: ``verified`` is recorded, ``mismatch``/``error``
-    invalidates the observation, and ``unsupported`` (beyond the exact oracle's
-    bounds) is coverage information rather than success or failure.
+    Every required check must be ``verified``. An ``unsupported`` semantic
+    result remains unsupported, even if legality, layout and routing pass.
+    Conclusive negatives from additional checks also invalidate the observation.
     """
     combined = {}
     statuses = set()
@@ -65,7 +64,7 @@ def target_legality(circuit: dict, target: dict) -> dict:
         def walk(body, mapping, path):
             for index, op in enumerate(body["operations"]):
                 name = op["name"]
-                if name == "barrier":
+                if name == "barrier" and op.get("kind", "barrier") == "barrier":
                     continue
                 if name not in operations:
                     return {
@@ -75,6 +74,10 @@ def target_legality(circuit: dict, target: dict) -> dict:
                         "path": [*path, index],
                     }
                 support = operations[name]
+                expected_kind = "if_else" if name == "if_else" else "delay" if name == "delay" else "standard"
+                if op.get("kind", expected_kind) != expected_kind:
+                    return {"status": "mismatch", "reason": "non_native_operation_identity",
+                            "operation": name, "kind": op.get("kind")}
                 physical = [mapping[q] for q in op.get("qargs", [])]
                 if "blocks" in op:
                     if support["arity"] is not None:
@@ -174,13 +177,15 @@ def routing_replay(
 
     def replay(expected, observed, mapping):
         queues = defaultdict(deque)
-        expected = [op for op in expected if op["name"] != "barrier"]
+        expected = [op for op in expected if not (
+            op["name"] == "barrier" and op.get("kind", "barrier") == "barrier"
+        )]
         for i, op in enumerate(expected):
             for wire in wires(op):
                 queues[wire].append(i)
         consumed, inserted = set(), 0
         for position, original in enumerate(observed):
-            if original["name"] == "barrier":
+            if original["name"] == "barrier" and original.get("kind", "barrier") == "barrier":
                 continue
             if original["name"] in {"while_loop", "for_loop", "switch_case", "box"}:
                 return {
@@ -234,6 +239,7 @@ def routing_replay(
                     queues[wire].popleft()
             elif (
                 original["name"] == "swap"
+                and original.get("kind", "standard") == "standard"
                 and len(original["qargs"]) == 2
                 and not original["cargs"]
                 and not original.get("condition")

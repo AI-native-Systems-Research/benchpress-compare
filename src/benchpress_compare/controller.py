@@ -11,7 +11,7 @@ import uuid
 from .config import RunConfig, SiteConfig
 from .errors import CompareError, ReconciliationError
 from .executors.lsf import LSFExecutor
-from .identity import atomic_write_json, canonical_hash, read_json
+from .identity import atomic_write_json, canonical_hash, harness_identity, read_json
 from .orchestrator import status, verify_plan
 from .pilot import runtime_profile
 from .store import Lease
@@ -27,6 +27,13 @@ def submit_controller(config: RunConfig, *, prepare_only=False, retry_cancelled=
         )
     executor = LSFExecutor(site)
     with Lease(root / "state/launch.lease") as lease:
+        request_path = root / "request.json"
+        if request_path.exists():
+            request = read_json(request_path)
+            if request.get("coordinator_hash", harness_identity()) != harness_identity():
+                raise CompareError(
+                    "Coordinator implementation changed after launch; use a new results directory"
+                )
         if (root / "plan.json").exists():
             verify_plan(root)
             if prepare_only:
@@ -76,11 +83,17 @@ def submit_controller(config: RunConfig, *, prepare_only=False, retry_cancelled=
         # Snapshot on the launch host; workers never depend on live source trees.
         from .preparation import _snapshot_paths, _harness_wheel
 
-        request_path = root / "request.json"
         if not request_path.exists():
             config.validate()
             with lease.fenced():
-                atomic_write_json(request_path, {"schema_version": 1, "config": config.to_dict()})
+                atomic_write_json(
+                    request_path,
+                    {
+                        "schema_version": 1,
+                        "config": config.to_dict(),
+                        "coordinator_hash": harness_identity(),
+                    },
+                )
         else:
             saved = RunConfig(**read_json(request_path)["config"])
             saved_values, requested_values = saved.to_dict(), config.to_dict()
@@ -88,6 +101,11 @@ def submit_controller(config: RunConfig, *, prepare_only=False, retry_cancelled=
                 saved_values["accept_unresolved"] = True
             if saved_values != requested_values:
                 raise CompareError("LSF continuation must use its saved configuration")
+            if "coordinator_hash" not in request:
+                with lease.fenced():
+                    atomic_write_json(
+                        request_path, {**request, "coordinator_hash": harness_identity()}
+                    )
         _snapshot_paths(config, root)
         _harness_wheel(root / "preparation/harness")
         token = uuid.uuid4().hex

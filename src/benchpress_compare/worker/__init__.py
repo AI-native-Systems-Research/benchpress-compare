@@ -184,6 +184,7 @@ def _run_task(spec, output):
         validate_semantics,
     )
     from .adapter import compile_observation
+    from .starts import reviewed_start_source
 
     fixture, circuit = _fixture(spec["fixture_path"])
     snapshot = _load_json(spec["target_path"])
@@ -196,7 +197,8 @@ def _run_task(spec, output):
     target = import_target(snapshot)
     try:
         compiled, diagnostics, artifacts = compile_observation(
-            circuit, target, spec["level"], spec["seed"]
+            circuit, target, spec["level"], spec["seed"],
+            native_start_source=reviewed_start_source(spec.get("manifest_path")),
         )
     except Exception as error:
         from .adapter import AdapterIncompatible
@@ -217,11 +219,18 @@ def _run_task(spec, output):
     else:
         initial = list(compiled.layout.initial_index_layout(filter_ancillas=True))
         final = list(compiled.layout.final_index_layout(filter_ancillas=True))
+    semantics = validate_semantics(fixture["logical"], serialized, initial, final)
+    certificate = diagnostics["semantic_certificate"]
+    if semantics["status"] == "unsupported":
+        semantics = {**certificate, "bounded_oracle": semantics}
+    elif certificate["status"] in {"mismatch", "error"}:
+        semantics = {**certificate, "bounded_oracle": semantics,
+                     "reason": "contradictory_or_failed_semantic_certificate"}
     checks = {
         "target_legality": target_legality(serialized, snapshot),
         "layout": layout_validation(initial, final, circuit.num_qubits, compiled.num_qubits),
         "routing": diagnostics["routing_replay"],
-        "semantics": validate_semantics(fixture["logical"], serialized, initial, final),
+        "semantics": semantics,
     }
     if spec.get("phase") == "preflight":
         from benchpress_compare.corpus.embedding import search_embedding

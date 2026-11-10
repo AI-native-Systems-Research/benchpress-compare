@@ -56,7 +56,7 @@ def active_qubits(circuit: dict) -> set[int]:
     validate_circuit(circuit)
     active: set[int] = set()
     for op in circuit["operations"]:
-        if op["name"] == "barrier":
+        if op["name"] == "barrier" and op.get("kind", "barrier") == "barrier":
             continue
         if "blocks" in op:
             for block in op["blocks"]:
@@ -74,6 +74,7 @@ def measure(circuit: dict, native_2q_names: tuple[str, ...] | list[str] = ("cz",
         count = 0
         for op in body["operations"]:
             name = op["name"]
+            barrier = name == "barrier" and op.get("kind", "barrier") == "barrier"
             qs, cs = op.get("qargs", []), op.get("cargs", [])
             reads = op.get("condition", {}).get("bits", [])
             touched_c = set(cs) | set(reads)
@@ -95,9 +96,11 @@ def measure(circuit: dict, native_2q_names: tuple[str, ...] | list[str] = ("cz",
                 for c in touched_c:
                     cdepth[c] = boundary
                 continue
-            if len(qs) == 2 and name != "barrier" and name not in native:
+            if len(qs) == 2 and not barrier and (
+                name not in native or op.get("kind", "standard") != "standard"
+            ):
                 raise UnsupportedMetric(f"Non-native two-qubit operation: {name}")
-            if len(qs) > 2 and name != "barrier":
+            if len(qs) > 2 and not barrier:
                 raise UnsupportedMetric(f"Non-native multi-qubit operation: {name}")
             cost = int(name in native and len(qs) == 2)
             count += cost
@@ -131,7 +134,9 @@ def structural_signature(circuit: dict) -> list:
             if "blocks" in op:
                 for branch, block in enumerate(op["blocks"]):
                     walk(block, qs, [*context, [op["name"], branch, op.get("condition")]])
-            elif len(qs) == 2 and op["name"] != "barrier":
+            elif len(qs) == 2 and not (
+                op["name"] == "barrier" and op.get("kind", "barrier") == "barrier"
+            ):
                 result.append([context, op["name"], qs])
 
     walk(circuit, list(range(circuit["num_qubits"])), [])

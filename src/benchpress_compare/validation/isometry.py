@@ -3,6 +3,19 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from collections import defaultdict
+
+from .instrument import _unsupported_conditions
+
+
+def _measurement_trace(events):
+    """Canonical dependency trace, allowing only independent event reorderings."""
+    trace = defaultdict(list)
+    for classical, quantum in events:
+        event = (classical, quantum)
+        trace[("q", quantum)].append(event)
+        trace[("c", classical)].append(event)
+    return dict(trace)
 
 
 def isometry_equivalence(
@@ -20,6 +33,8 @@ def isometry_equivalence(
         "max_logical_qubits": max_logical_qubits,
         "max_physical_qubits": max_physical_qubits,
     }
+    if _unsupported_conditions(logical) or _unsupported_conditions(output):
+        return {"status": "unsupported", "reason": "unsupported_classical_condition", "scope": scope}
 
     def unitary_prefix(circuit, locations):
         result = deepcopy(circuit)
@@ -28,22 +43,19 @@ def isometry_equivalence(
         body = []
         inverse = {physical: logical for logical, physical in enumerate(locations)}
         for op in circuit["operations"]:
-            if op["name"] in {
-                "reset",
-                "if_else",
-                "while_loop",
-                "for_loop",
-                "switch_case",
-            } or op.get("condition"):
+            kind = op.get("kind")
+            if (
+                kind == "standard" and op["name"] == "reset"
+            ) or op.get("blocks") or op.get("condition"):
                 return None
-            if op["name"] == "measure":
+            if kind == "standard" and op["name"] == "measure":
                 if len(op["qargs"]) != 1 or len(op["cargs"]) != 1 or op["qargs"][0] not in inverse:
                     return None
                 measured.add(op["qargs"][0])
                 # Preserve every measurement event, including a dephasing whose
                 # classical result is overwritten by a later measurement.
                 classical.append([op["cargs"][0], inverse[op["qargs"][0]]])
-            elif op["name"] not in {"barrier", "delay"}:
+            elif kind not in {"barrier", "delay"}:
                 if measured.intersection(op["qargs"]):
                     return None
                 body.append(op)
@@ -58,8 +70,22 @@ def isometry_equivalence(
     )
     if a is None or b is None:
         return {"status": "unsupported", "reason": "requires_instrument_oracle", "scope": scope}
-    if a[1] != b[1] or logical["num_clbits"] != output["num_clbits"]:
+    if logical["num_clbits"] != output["num_clbits"]:
         return {"status": "mismatch", "reason": "terminal_measurement_map_changed", "scope": scope}
+    if _measurement_trace(a[1]) != _measurement_trace(b[1]):
+        return {"status": "unsupported", "reason": "requires_instrument_oracle", "scope": scope}
+    measured = bool(a[1] or b[1])
+
+    def unitary_mismatch(**details):
+        # A premeasurement unitary is a sufficient certificate, not a
+        # necessary one: diagonal phases can disappear into final projectors.
+        return {
+            "status": "unsupported" if measured else "mismatch",
+            "reason": "requires_instrument_oracle" if measured else "logical_isometry_changed",
+            "scope": scope,
+            **details,
+        }
+
     logical, output = a[0], b[0]
     active = sorted(active_qubits(output) | set(initial) | set(final))
     n, m = logical["num_qubits"], len(active)
@@ -103,22 +129,11 @@ def isometry_equivalence(
             if ancilla_state is None:
                 ancilla_state = expected.conj() @ state
                 if abs(float(np.vdot(ancilla_state, ancilla_state).real) - 1) > 1e-8:
-                    return {
-                        "status": "mismatch",
-                        "reason": "logical_isometry_changed",
-                        "column": column,
-                        "scope": scope,
-                    }
+                    return unitary_mismatch(column=column)
             error = float(np.max(np.abs(state - np.outer(expected, ancilla_state))))
             max_error = max(error, max_error)
             if error > 1e-8:
-                return {
-                    "status": "mismatch",
-                    "reason": "logical_isometry_changed",
-                    "column": column,
-                    "max_error": error,
-                    "scope": scope,
-                }
+                return unitary_mismatch(column=column, max_error=error)
         return {
             "status": "verified",
             "covers": ["full_quantum_instrument"],

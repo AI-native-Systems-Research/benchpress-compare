@@ -7,9 +7,10 @@ from statistics import median
 from typing import Iterable
 
 from .weights import LEVELS, TARGETS
+from .validation import REQUIRED_CHECKS
 
 ADMISSION_POLICY = "baseline-three-seed-six-configuration-v1"
-REQUIRED_VALIDATION_CHECKS = frozenset({"target_legality", "layout", "routing"})
+REQUIRED_VALIDATION_CHECKS = frozenset(REQUIRED_CHECKS)
 _SUCCESS = {"SUCCEEDED", "SUCCESS", "COMPLETE"}
 
 
