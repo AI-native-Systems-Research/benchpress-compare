@@ -1,0 +1,27 @@
+# Site configuration for the CCC LSF cluster, "normal" queue.
+# LSF_UNIT_FOR_LIMITS=GB on this site, so -M and rusage[mem=] are in GB.
+[lsf]
+queue = "normal"
+
+# Controller dispatch budgets include pending and suspended jobs.
+max_jobs = 100
+max_cpus = 120
+max_memory_gb = 2000
+poll_seconds = 20
+visibility_grace_seconds = 900
+job_wall_seconds = 172800
+shard_max_observations = 6
+
+memory_unit = "GB"
+memory_per_slot = false
+
+controller_cpus = 1
+controller_memory_gb = 8
+build_cpus = 8
+build_memory_gb = 32
+
+bsub = "bsub"
+bjobs = "bjobs"
+bhist = "bhist"
+bkill = "bkill"
+machine_readable = true
