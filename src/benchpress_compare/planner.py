@@ -120,18 +120,39 @@ def recommendations(
         capacity = min(capacity, max_jobs)
     cached = set(cached_baseline_ids)
     costs, savings = [], []
+    additional_artifact_bytes = 0
+    missing_artifact_cases = set()
     for spec in specs:
-        cost = estimates[spec["case_id"]]["estimated_seconds"]
-        if spec["arm"] == "baseline" and spec["observation_id"] in cached:
+        case_estimate = estimates[spec["case_id"]]
+        cost = case_estimate["estimated_seconds"]
+        cached_baseline = spec["arm"] == "baseline" and spec["observation_id"] in cached
+        if cached_baseline:
             savings.append(cost)
         else:
             costs.append((cost, spec["runtime_profile"]["native_threads"]))
+        artifact_bytes = case_estimate.get("observed_max_artifact_bytes")
+        if (
+            case_estimate.get("artifact_size_status") != "available"
+            or type(artifact_bytes) is not int
+            or artifact_bytes < 0
+        ):
+            missing_artifact_cases.add(spec["case_id"])
+        else:
+            # Attempts retain their artifacts; publication copies them into the
+            # run result and, for new baseline work, the reusable store.
+            copies = 1 if cached_baseline else 3 if spec["arm"] == "baseline" else 2
+            additional_artifact_bytes += copies * artifact_bytes
     seconds = sum(cost for cost, _ in costs)
     return {
         "schema_version": 1,
         "recommended_concurrency": capacity,
         "planned_jobs": len(bundles),
         "estimated_cpu_hours": sum(t * n for t, n in costs) / 3600,
+        "estimated_additional_artifact_bytes": additional_artifact_bytes
+        if not missing_artifact_cases
+        else None,
+        "artifact_estimate_status": "unavailable" if missing_artifact_cases else "available",
+        "artifact_estimate_missing_cases": sorted(missing_artifact_cases),
         "estimated_elapsed_seconds": {"lower": seconds / capacity, "upper": seconds},
         "cache_saved_observations": len(savings),
         "cache_saved_worker_seconds": sum(savings),
@@ -141,5 +162,11 @@ def recommendations(
             "baseline-derived estimates apply to both arms",
             "queue wait excluded",
             "conservative common-profile concurrency; heterogeneous token scheduling may improve it",
+            "artifact sizes use each case's maximum persisted baseline preflight/pilot bytes, "
+            "including compression, as the size assumption for both arms and future seeds",
+            "new baseline artifacts retain three copies (attempt, result, cache); evolve retains "
+            "two (attempt, result); cached baseline adds one result copy",
+            "artifact storage excludes existing files, logs, build workspaces, receipt/manifest "
+            "metadata, filesystem allocation overhead, and failed or retried attempts",
         ],
     }

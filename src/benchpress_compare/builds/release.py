@@ -18,6 +18,7 @@ import subprocess
 import sys
 import sysconfig
 import tomllib
+import uuid
 import zipfile
 from pathlib import Path
 from typing import Sequence
@@ -258,10 +259,12 @@ def resolve_common_dependencies(
         "requirements_hash": file_hash(lock_path),
         "build_constraints_path": str(constraints_path),
         "build_constraints_hash": file_hash(constraints_path),
-        "input_hash": canonical_hash({
-            "requirements": sorted(requirements),
-            "build_constraints": list(BUILD_DEPENDENCY_CONSTRAINTS),
-        }),
+        "input_hash": canonical_hash(
+            {
+                "requirements": sorted(requirements),
+                "build_constraints": list(BUILD_DEPENDENCY_CONSTRAINTS),
+            }
+        ),
         "backends": backends,
         "rust_toolchain": toolchains[0],
         "python": str(python or sys.executable),
@@ -443,6 +446,48 @@ def verify_build(directory: Path | str) -> dict:
     return manifest
 
 
+def clean_build_workspace(directory: Path | str, *, lease=None) -> dict:
+    """Discard generated build inputs and caches after verifying the published build.
+
+    The immutable source snapshot, wheels, runtime environment and attestation
+    artifacts remain available. A failed build retains its workspace for
+    diagnosis because it cannot pass ``verify_build``.
+    """
+    directory = Path(directory).resolve()
+    manifest = verify_build(directory)
+    workspaces = [directory / name for name in ("build-source", "scratch")]
+    protected = [directory / name for name in manifest["artifacts"]]
+    protected.extend(
+        [
+            directory / "env",
+            Path(manifest["wheel"]),
+            Path(manifest["env_python"]),
+            Path(manifest["snapshot_path"]),
+        ]
+    )
+    for workspace in workspaces:
+        # Never follow a replaced workspace root or discard a newly declared
+        # artifact if the build layout changes in a later protocol.
+        if workspace.is_symlink() or any(
+            path.resolve().is_relative_to(workspace) for path in protected
+        ):
+            raise IntegrityError(f"Build workspace contains retained evidence: {workspace}")
+    retired = []
+    with lease.fenced() if lease is not None else contextlib.nullcontext():
+        for workspace in workspaces:
+            if workspace.exists():
+                private = directory / f".cleanup-{workspace.name}-{uuid.uuid4().hex}"
+                workspace.rename(private)
+                retired.append(private)
+        fsync_directory(directory)
+    # Recursive removal on shared storage can exceed the lease TTL. Only the
+    # quick detach needs fencing; private names cannot become a new owner's
+    # workspace, and deleting them must not block lease heartbeats.
+    for private in retired:
+        shutil.rmtree(private)
+    return verify_build(directory)
+
+
 def build_release(
     snapshot_directory: Path | str,
     destination: Path | str,
@@ -491,7 +536,7 @@ def build_release(
         existing = verify_build(destination)
         if existing["request_identity"] != requested_identity:
             raise IntegrityError("Build destination has an incompatible identity")
-        return existing
+        return clean_build_workspace(destination, lease=lease)
     if destination.exists() and any(destination.iterdir()):
         raise PreparationError(f"Incomplete build needs a new attempt destination: {destination}")
     destination.mkdir(parents=True, exist_ok=True)
@@ -723,4 +768,4 @@ def build_release(
             {"schema_version": 1, "manifest_hash": file_hash(destination / "manifest.json")},
         )
         fsync_directory(destination)
-    return verify_build(destination)
+    return clean_build_workspace(destination, lease=lease)

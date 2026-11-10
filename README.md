@@ -112,6 +112,12 @@ artifacts, baseline references, wheels and dependency locks. Installed virtual
 environments are omitted because their absolute paths cannot be relocated;
 `export.json` records how to recreate them. Offline reports need no environments.
 
+Large circuit evidence is stored losslessly as `output.json.gz`,
+`initialization.json.gz`, and `pre-layout.json.gz`. Receipts checksum the compressed
+bytes; decompress with standard gzip tools to inspect the JSON. Successful builds
+discard temporary compiler workspaces and download caches after verification,
+retaining source snapshots, wheels, installed environments, and build logs.
+
 Report filters support circuit, target class or snapshot, level, family, band,
 and recipe. Repeated values within one dimension form a union; different dimensions
 intersect. Reports are written under `results-root/reports/`:

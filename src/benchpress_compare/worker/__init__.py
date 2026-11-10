@@ -10,9 +10,15 @@ import time
 import traceback
 from pathlib import Path
 
-from benchpress_compare.identity import atomic_write_json, canonical_hash, file_hash
+from benchpress_compare.identity import (
+    atomic_write_json,
+    atomic_write_json_gzip,
+    canonical_hash,
+    file_hash,
+)
 
-WORKER_PROTOCOL = "observation-worker-v1"
+WORKER_PROTOCOL = "observation-worker-v2-gzip"
+COMPRESSED_ARTIFACTS = {"output.json", "initialization.json", "pre-layout.json"}
 
 
 def _environment(spec):
@@ -299,8 +305,12 @@ def run_spec(spec: dict) -> dict:
         receipt.update(result)
         receipt["artifacts"] = {}
         for name, data in sorted(artifacts.items()):
+            writer = atomic_write_json
+            if name in COMPRESSED_ARTIFACTS:
+                name += ".gz"
+                writer = atomic_write_json_gzip
             path = output / name
-            atomic_write_json(path, data)
+            writer(path, data)
             receipt["artifacts"][name] = file_hash(path)
     except Exception as error:
         receipt.update(
@@ -310,7 +320,12 @@ def run_spec(spec: dict) -> dict:
             traceback=traceback.format_exc(),
             artifacts={},
         )
-    receipt["resources"] = {"elapsed_seconds": time.monotonic() - started}
+    receipt["resources"] = {
+        "elapsed_seconds": time.monotonic() - started,
+        "persisted_artifact_bytes": sum(
+            (output / name).stat().st_size for name in receipt.get("artifacts", {})
+        ),
+    }
     try:
         import psutil
 

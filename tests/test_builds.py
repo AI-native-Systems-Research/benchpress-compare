@@ -7,10 +7,13 @@ import pytest
 from benchpress_compare.builds import release_policy, snapshot_source, verify_snapshot
 from benchpress_compare.builds.release import (
     _dependency_constraints,
+    _environment_manifest,
     _requirements,
     binary_identity,
+    clean_build_workspace,
     resolve_common_dependencies,
     sanitized_environment,
+    verify_build,
 )
 from benchpress_compare.errors import IntegrityError, PreparationError
 
@@ -228,3 +231,125 @@ def test_common_resolution_pins_both_installed_and_isolated_build_toolchains(tmp
 def test_old_lock_cannot_silently_select_a_new_isolated_toolchain():
     with pytest.raises(IntegrityError, match="lacks pinned build constraints"):
         _dependency_constraints({"requirements_path": "old-lock.txt"})
+
+
+@pytest.fixture
+def ready_build(tmp_path):
+    import platform
+    import sysconfig
+
+    from benchpress_compare.identity import atomic_write_json, file_hash
+
+    directory = tmp_path / "build"
+    for name in ("build-source", "scratch", "env/bin", "env/lib", "logs"):
+        (directory / name).mkdir(parents=True)
+    snapshot = tmp_path / "snapshot"
+    snapshot.mkdir()
+    (snapshot / "source.txt").write_text("immutable source")
+    (directory / "build-source/generated.o").write_text("disposable compiler output")
+    (directory / "scratch/package").write_text("installed dependency")
+    os.link(directory / "scratch/package", directory / "env/lib/package")
+    (directory / "env/bin/python").write_text("interpreter")
+    (directory / "env/lib/native.so").write_text("native extension")
+    (directory / "wheel.whl").write_text("release wheel")
+    (directory / "logs/build.log").write_text("optimized build evidence")
+    native = {"lib/native.so": file_hash(directory / "env/lib/native.so")}
+    manifest = {
+        "schema_version": 1,
+        "artifacts": {
+            name: file_hash(directory / name) for name in ("wheel.whl", "logs/build.log")
+        },
+        "environment_files": _environment_manifest(directory / "env"),
+        "wheel": str(directory / "wheel.whl"),
+        "wheel_hash": file_hash(directory / "wheel.whl"),
+        "env_python": str(directory / "env/bin/python"),
+        "interpreter_hash": file_hash(directory / "env/bin/python"),
+        "snapshot_path": str(snapshot),
+        "build_key": "build-inputs",
+        "build_id": binary_identity("build-inputs", file_hash(directory / "wheel.whl"), native),
+        "release": {"profile": "release"},
+        "attestation": {
+            "native_hashes": native,
+            "release_log_verified": True,
+            "architecture": platform.machine(),
+            "implementation": platform.python_implementation(),
+            "platform": sysconfig.get_platform(),
+            "os": platform.system(),
+            "libc": list(platform.libc_ver()),
+        },
+    }
+    atomic_write_json(directory / "manifest.json", manifest)
+    atomic_write_json(
+        directory / "READY",
+        {"schema_version": 1, "manifest_hash": file_hash(directory / "manifest.json")},
+    )
+    verify_build(directory)
+    return directory
+
+
+def test_build_cleanup_preserves_runtime_hardlinks_snapshots_and_evidence(ready_build):
+    original = verify_build(ready_build)
+    snapshot = Path(original["snapshot_path"])
+    (ready_build / "scratch/external-link").symlink_to(snapshot, target_is_directory=True)
+    assert clean_build_workspace(ready_build) == original
+    assert not (ready_build / "build-source").exists()
+    assert not (ready_build / "scratch").exists()
+    assert (ready_build / "env/lib/package").read_text() == "installed dependency"
+    assert (snapshot / "source.txt").read_text() == "immutable source"
+    assert clean_build_workspace(ready_build) == original
+
+
+def test_build_cleanup_requires_valid_ready_evidence(ready_build):
+    (ready_build / "wheel.whl").write_text("corrupted")
+    with pytest.raises(IntegrityError, match="artifact checksum mismatch"):
+        clean_build_workspace(ready_build)
+    assert (ready_build / "build-source/generated.o").exists()
+    assert (ready_build / "scratch/package").exists()
+
+
+def test_build_cleanup_keeps_heartbeat_available_during_slow_removal(ready_build, monkeypatch):
+    import shutil
+    import time
+
+    from benchpress_compare.store import Lease
+
+    original_remove = shutil.rmtree
+    with Lease(ready_build.parent / "build.lease", ttl=1) as lease:
+
+        def slow_remove(path):
+            assert Path(path).name.startswith(".cleanup-")
+            assert not (ready_build / "build-source").exists()
+            assert not (ready_build / "scratch").exists()
+            time.sleep(1.2)
+            lease.assert_owned()
+            original_remove(path)
+
+        monkeypatch.setattr("benchpress_compare.builds.release.shutil.rmtree", slow_remove)
+        clean_build_workspace(ready_build, lease=lease)
+        lease.assert_owned()
+    assert not list(ready_build.glob(".cleanup-*"))
+
+
+@pytest.mark.parametrize("retained", ["artifact", "snapshot", "symlink"])
+def test_build_cleanup_refuses_retained_workspace_paths(ready_build, retained):
+    import json
+    import shutil
+
+    from benchpress_compare.identity import atomic_write_json, file_hash
+
+    manifest = json.loads((ready_build / "manifest.json").read_text())
+    if retained == "artifact":
+        manifest["artifacts"]["scratch/package"] = file_hash(ready_build / "scratch/package")
+    elif retained == "snapshot":
+        manifest["snapshot_path"] = str(ready_build / "scratch")
+    else:
+        shutil.rmtree(ready_build / "scratch")
+        (ready_build / "scratch").symlink_to(manifest["snapshot_path"], target_is_directory=True)
+    atomic_write_json(ready_build / "manifest.json", manifest)
+    atomic_write_json(
+        ready_build / "READY",
+        {"schema_version": 1, "manifest_hash": file_hash(ready_build / "manifest.json")},
+    )
+    with pytest.raises(IntegrityError, match="workspace contains retained evidence"):
+        clean_build_workspace(ready_build)
+    assert (ready_build / "build-source/generated.o").exists()

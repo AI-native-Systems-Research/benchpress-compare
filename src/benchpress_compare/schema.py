@@ -9,7 +9,7 @@ from .errors import IntegrityError
 
 VERSION = 1
 PROTOCOLS = {
-    "worker": "observation-worker-v1",
+    "worker": "observation-worker-v2-gzip",
     "instrumentation": "sabre-native-counts-v3",
     "metric": "native-n2-weighted-d2-v1",
     "validation": "target-legality-v4",

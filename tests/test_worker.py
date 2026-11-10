@@ -179,6 +179,7 @@ def test_initialization_snapshot_is_captured_once_before_later_dag_mutations(mon
 
 
 def test_worker_fresh_process_receipt_and_artifacts(tmp_path):
+    import gzip
     qiskit = pytest.importorskip("qiskit")
     from benchpress_compare.targets import synthetic_target
     from benchpress_compare.corpus.ir import export_circuit
@@ -226,6 +227,16 @@ def test_worker_fresh_process_receipt_and_artifacts(tmp_path):
     assert set(receipt["validation"]["checks"]) == {"target_legality"}
     assert "semantic-passes.json" not in receipt["artifacts"]
     assert not any(name.startswith("routing-") for name in receipt["artifacts"])
+    from benchpress_compare.schema import PROTOCOLS
+    from benchpress_compare.worker import WORKER_PROTOCOL
+
+    assert receipt["worker_protocol"] == WORKER_PROTOCOL == PROTOCOLS["worker"]
+    compressed = {"output.json.gz", "initialization.json.gz"}
+    assert compressed.issubset(receipt["artifacts"])
+    for name in compressed:
+        assert not (tmp_path / "attempt" / name.removesuffix(".gz")).exists()
+        with gzip.open(tmp_path / "attempt" / name, "rt", encoding="utf-8") as stream:
+            assert json.load(stream)["operations"]
     assert receipt["N2"] == 1
     for field in (
         "observation_id",
@@ -239,6 +250,38 @@ def test_worker_fresh_process_receipt_and_artifacts(tmp_path):
         assert receipt[field] == spec[field]
     for path, digest in receipt["artifacts"].items():
         assert file_hash(tmp_path / "attempt" / path) == digest
+    assert receipt["resources"]["persisted_artifact_bytes"] == sum(
+        (tmp_path / "attempt" / path).stat().st_size for path in receipt["artifacts"]
+    )
+
+
+def test_worker_persists_all_circuit_evidence_as_lossless_gzip(tmp_path, monkeypatch):
+    import gzip
+    pytest.importorskip("qiskit")
+    from benchpress_compare.identity import file_hash
+    from benchpress_compare.worker import run_spec
+
+    evidence = {
+        name: {"operations": [{"name": "swap", "qubits": [0, 1]}], "boundary": name}
+        for name in ("output.json", "initialization.json", "pre-layout.json")
+    }
+    evidence["diagnostics.json"] = {"inserted_swaps": 1}
+    monkeypatch.setattr("benchpress_compare.worker._attest_runtime", lambda *_: {})
+    monkeypatch.setattr(
+        "benchpress_compare.worker._run_task", lambda *_: ({"status": "SUCCEEDED"}, evidence),
+    )
+    receipt = run_spec({"output_dir": str(tmp_path)})
+    assert receipt["status"] == "SUCCEEDED"
+    for name, original in evidence.items():
+        stored_name = name if name == "diagnostics.json" else name + ".gz"
+        path = tmp_path / stored_name
+        assert receipt["artifacts"][stored_name] == file_hash(path)
+        if stored_name.endswith(".gz"):
+            assert not (tmp_path / name).exists()
+            with gzip.open(path, "rt", encoding="utf-8") as stream:
+                assert json.load(stream) == original
+        else:
+            assert json.loads(path.read_text()) == original
 
 
 def test_invalid_fixture_never_compiles_or_publishes_success(tmp_path):

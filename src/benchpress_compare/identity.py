@@ -5,7 +5,9 @@ from __future__ import annotations
 from dataclasses import asdict, is_dataclass
 from enum import Enum
 from fractions import Fraction
+import gzip
 import hashlib
+import io
 import json
 import math
 import os
@@ -84,6 +86,49 @@ def atomic_write_json(path: str | Path, value) -> None:
     try:
         with os.fdopen(fd, "wb") as stream:
             stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(name, path)
+        fsync_directory(path.parent)
+    finally:
+        Path(name).unlink(missing_ok=True)
+
+
+def atomic_write_json_gzip(path: str | Path, value) -> None:
+    """Stream canonical JSON into a deterministic, atomically published gzip.
+
+    Unlike canonical_bytes(), this avoids both a normalized copy of a large
+    circuit and its complete serialized byte string. Gzip headers contain no
+    output filename or timestamp, so equal artifacts have equal byte hashes.
+    """
+    def check_keys(item):
+        if isinstance(item, dict):
+            if not all(isinstance(key, str) for key in item):
+                raise TypeError("Canonical mapping keys must be strings")
+            for child in item.values():
+                check_keys(child)
+        elif isinstance(item, (list, tuple)):
+            for child in item:
+                check_keys(child)
+
+    # JSONEncoder otherwise silently stringifies non-string mapping keys. Its
+    # default handler normalizes only exceptional values, not the full tree.
+    check_keys(value)
+    encoder = json.JSONEncoder(
+        default=_normalize, sort_keys=True, separators=(",", ":"),
+        ensure_ascii=False, allow_nan=False,
+    )
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, name = tempfile.mkstemp(prefix=f".{path.name}.", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            with gzip.GzipFile(
+                filename="", mode="wb", fileobj=stream, compresslevel=6, mtime=0,
+            ) as compressed:
+                with io.TextIOWrapper(compressed, encoding="utf-8", newline="\n") as text:
+                    text.writelines(encoder.iterencode(value))
+                    text.write("\n")
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(name, path)

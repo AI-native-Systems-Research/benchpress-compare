@@ -168,10 +168,22 @@ def estimate(
                 f"Case {case['case_id']} needs at least {required_time:.1f}s "
                 f"and {required_memory} bytes; raise preparation ceilings"
             )
+        artifact_sizes = [
+            row.get("resources", {}).get("persisted_artifact_bytes") for row in samples
+        ]
+        measured_artifact_sizes = [
+            size for size in artifact_sizes if type(size) is int and size >= 0
+        ]
+        artifact_sizes_complete = len(measured_artifact_sizes) == len(samples)
         estimates[case["case_id"]] = {
             "sample_count": len(samples),
             "observed_max_seconds": max(times),
             "observed_max_rss_bytes": max(memory),
+            "observed_max_artifact_bytes": max(measured_artifact_sizes)
+            if artifact_sizes_complete
+            else None,
+            "artifact_size_status": "available" if artifact_sizes_complete else "unavailable",
+            "artifact_size_sample_count": len(measured_artifact_sizes),
             "estimated_seconds": required_time,
             "extrapolated": False,
             "runtime_profile": runtime_profile(
