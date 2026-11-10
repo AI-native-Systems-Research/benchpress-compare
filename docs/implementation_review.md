@@ -94,7 +94,8 @@ Screening must establish all 2,682 baseline observations before cohort freeze.
 | Attempt | Controller | Outcome |
 | --- | --- | --- |
 | 1 | 1489599 | Preparation failed in dependency-resolution job 1489609: an `ibm-platform-services` source build lacked `pkg_resources` in its isolated build environment. No benchmark observations collected; no LSF jobs remained after failure. |
-| 2 | 1496106 | Clean restart after the dependency and instrumentation fixes; in progress. Previous attempt retained under `logs/failed-run-001/`. |
+| 2 | 1496106 | Both optimized source builds, all 149 fixtures, 15 target snapshots, and both import checks succeeded. Stopped all run-owned jobs when commit `c616d28` changed the contract; user confirmed the restart must use the updated plan. Evidence retained under `logs/superseded-run-002/`. |
+| 3 | 1500351 | Clean restart under user-confirmed `target-legality-v4` and `sabre-native-counts-v3`; in progress. Updated code passed 235 tests; subsequent wrapper-cleanup and report-scope fixes passed 42 focused tests, Ruff, and whitespace checks. |
 
 Acceptance still requires verified actual source builds, completed baseline
 admission and pilot, a frozen valid cohort, all planned paired comparison

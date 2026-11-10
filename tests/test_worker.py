@@ -75,6 +75,26 @@ def test_native_swap_counts_preserve_original_and_branch_swaps(monkeypatch):
     assert artifacts == {}
 
 
+def test_native_instrumentation_restores_partial_setup_after_incompatible_abi(monkeypatch):
+    pytest.importorskip("qiskit")
+    import importlib
+    from benchpress_compare.worker.adapter import AdapterIncompatible, native_instrumentation
+
+    layout = importlib.import_module("qiskit.transpiler.passes.layout.sabre_layout")
+    routing = importlib.import_module("qiskit.transpiler.passes.routing.sabre_swap")
+    original_layout = layout.sabre_layout_and_routing
+
+    def unsupported_routing(dag):
+        raise AssertionError("Incompatible native function must not be called")
+
+    monkeypatch.setattr(routing, "sabre_routing", unsupported_routing)
+    with pytest.raises(AdapterIncompatible, match="Unknown SABRE trial ABI"):
+        with native_instrumentation({"native_calls": []}, {}, {"status": "not_requested"}):
+            pytest.fail("Incompatible ABI must be rejected during setup")
+    assert layout.sabre_layout_and_routing is original_layout
+    assert routing.sabre_routing is unsupported_routing
+
+
 def test_original_swap_elision_is_separate_from_inserted_routing_swaps():
     qiskit = pytest.importorskip("qiskit")
     from benchpress_compare.targets import synthetic_target, import_target

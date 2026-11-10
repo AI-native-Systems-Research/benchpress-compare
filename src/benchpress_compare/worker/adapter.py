@@ -90,74 +90,74 @@ def native_instrumentation(diagnostics: dict, artifacts: dict, native_start_sour
         ),
         ("qiskit.transpiler.passes.routing.sabre_swap", "sabre_routing", {"num_trials": 20}),
     ]
-    for module_name, function_name, expected in definitions:
-        module = importlib.import_module(module_name)
-        function = getattr(module, function_name, None)
-        if function is None:
-            raise AdapterIncompatible(
-                f"Unsupported native SABRE interface: {module_name}.{function_name}"
-            )
-        signature = inspect.signature(function)
-        if not set(expected).issubset(signature.parameters):
-            raise AdapterIncompatible(f"Unknown SABRE trial ABI: {signature}")
-
-        def wrap(
-            *args,
-            __function=function,
-            __signature=signature,
-            __name=function_name,
-            __expected=expected,
-            **kwargs,
-        ):
-            bound = __signature.bind(*args, **kwargs)
-            bound.apply_defaults()
-            for name, value in __expected.items():
-                if bound.arguments[name] != value:
-                    raise AdapterIncompatible(
-                        f"Executed {__name} {name}={bound.arguments[name]}, expected {value}"
-                    )
-            before_dag = bound.arguments["dag"]
-            before_qubits = before_dag.num_qubits()
-            swaps_before = _explicit_swaps(node.op for node in before_dag.op_nodes())
-            native = {
-                "function": __name,
-                "effective_trials": dict(__expected),
-                "seed": bound.arguments.get("seed"),
-                "max_iterations": bound.arguments.get("max_iterations"),
-                "partial_start_count": len(bound.arguments.get("partial_layouts", [])),
-                "skip_routing": bound.arguments.get("skip_routing", False),
-            }
-            if __name == "sabre_layout_and_routing":
-                from .starts import native_start_templates
-
-                before = export_circuit(dag_to_circuit(before_dag))
-                signature = structural_signature(before)
-                diagnostics["pre_layout_structure_hash"] = canonical_hash(signature)
-                diagnostics["pre_layout_two_qubit_count"] = len(signature)
-                artifacts["pre-layout.json"] = before
-                starts = native_start_templates(
-                    bound.arguments["target"], before_qubits, bound.arguments, native_start_source
-                )
-                if native_start_source.get("status") != "not_requested" and starts["status"] != "verified":
-                    raise AdapterIncompatible(f"Cannot attest effective SABRE starting layouts: {starts}")
-                native["starting_layouts"] = starts
-            result = __function(*args, **kwargs)
-            if not native["skip_routing"]:
-                after_dag = result[0]
-                swaps_after = _explicit_swaps(node.op for node in after_dag.op_nodes())
-                # Native routing retains original instructions and adds SWAPs.
-                # This is a count diagnostic, not an equivalence certificate.
-                native.update(
-                    explicit_swaps_before=swaps_before,
-                    explicit_swaps_after=swaps_after,
-                    inserted_swaps=swaps_after - swaps_before,
-                )
-            diagnostics["native_calls"].append(native)
-            return result
-
-        restored.append((module, function_name, function))
-        setattr(module, function_name, wrap)
     try:
+        for module_name, function_name, expected in definitions:
+            module = importlib.import_module(module_name)
+            function = getattr(module, function_name, None)
+            if function is None:
+                raise AdapterIncompatible(
+                    f"Unsupported native SABRE interface: {module_name}.{function_name}"
+                )
+            signature = inspect.signature(function)
+            if not set(expected).issubset(signature.parameters):
+                raise AdapterIncompatible(f"Unknown SABRE trial ABI: {signature}")
+
+            def wrap(
+                *args,
+                __function=function,
+                __signature=signature,
+                __name=function_name,
+                __expected=expected,
+                **kwargs,
+            ):
+                bound = __signature.bind(*args, **kwargs)
+                bound.apply_defaults()
+                for name, value in __expected.items():
+                    if bound.arguments[name] != value:
+                        raise AdapterIncompatible(
+                            f"Executed {__name} {name}={bound.arguments[name]}, expected {value}"
+                        )
+                before_dag = bound.arguments["dag"]
+                before_qubits = before_dag.num_qubits()
+                swaps_before = _explicit_swaps(node.op for node in before_dag.op_nodes())
+                native = {
+                    "function": __name,
+                    "effective_trials": dict(__expected),
+                    "seed": bound.arguments.get("seed"),
+                    "max_iterations": bound.arguments.get("max_iterations"),
+                    "partial_start_count": len(bound.arguments.get("partial_layouts", [])),
+                    "skip_routing": bound.arguments.get("skip_routing", False),
+                }
+                if __name == "sabre_layout_and_routing":
+                    from .starts import native_start_templates
+
+                    before = export_circuit(dag_to_circuit(before_dag))
+                    signature = structural_signature(before)
+                    diagnostics["pre_layout_structure_hash"] = canonical_hash(signature)
+                    diagnostics["pre_layout_two_qubit_count"] = len(signature)
+                    artifacts["pre-layout.json"] = before
+                    starts = native_start_templates(
+                        bound.arguments["target"], before_qubits, bound.arguments, native_start_source
+                    )
+                    if native_start_source.get("status") != "not_requested" and starts["status"] != "verified":
+                        raise AdapterIncompatible(f"Cannot attest effective SABRE starting layouts: {starts}")
+                    native["starting_layouts"] = starts
+                result = __function(*args, **kwargs)
+                if not native["skip_routing"]:
+                    after_dag = result[0]
+                    swaps_after = _explicit_swaps(node.op for node in after_dag.op_nodes())
+                    # Native routing retains original instructions and adds SWAPs.
+                    # This is a count diagnostic, not an equivalence certificate.
+                    native.update(
+                        explicit_swaps_before=swaps_before,
+                        explicit_swaps_after=swaps_after,
+                        inserted_swaps=swaps_after - swaps_before,
+                    )
+                diagnostics["native_calls"].append(native)
+                return result
+
+            restored.append((module, function_name, function))
+            setattr(module, function_name, wrap)
         yield
     finally:
         for module, name, original in reversed(restored):

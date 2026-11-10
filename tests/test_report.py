@@ -61,11 +61,16 @@ def test_report_deterministic_authoritative_and_csv_roundtrip(tmp_path):
     assert saved["validation_coverage"]["required_checks"] == ["target_legality"]
     assert saved["validation_coverage"]["scopes"] == {"target_legality": 2}
     assert "semantics" not in saved["validation_coverage"]
+    assert "behavior has not been compared" in saved["validation_coverage"]["scope_note"]
     assert "verified native target legality" in before["report.md"].decode()
+    assert before["report.md"].decode().index("behavior has not been compared") < before[
+        "report.md"
+    ].decode().index("| Metric | Score |")
     assert "smoke subset" in before["report.md"].decode()
     with open(paths["cases.csv"], newline="") as stream:
         rows = list(csv.DictReader(stream))
     assert len(rows) == 2
+    assert all(row["validation_scope"] == saved["validation_coverage"]["scope_note"] for row in rows)
     assert json.loads(rows[0]["ratio"]) == {"numerator": 9, "denominator": 10}
 
 
@@ -78,6 +83,7 @@ def test_grouped_query_saved_and_unavailable_null():
     assert "family/target_class" in report["groups"]
     assert report["summary"]["metrics"]["N2"]["score"] is None
     assert "NaN" not in json.dumps(report, allow_nan=False)
+    assert "behavior has not been compared" in report["validation_coverage"]["scope_note"]
 
 
 def test_offline_import_does_not_import_qiskit():

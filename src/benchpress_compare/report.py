@@ -17,6 +17,10 @@ from .validation import REQUIRED_CHECKS
 from .weights import fraction_record, read_fraction
 
 REPORT_PROTOCOL = "benchpress-report-v1"
+VALIDATION_SCOPE_NOTE = (
+    "Validation covers native target legality only. Accepted circuits are compatible "
+    "with the target; their behavior has not been compared with the input circuit."
+)
 
 
 def _compact(summary: dict) -> dict:
@@ -230,6 +234,7 @@ def build_report(
             "statuses": dict(sorted(validations.items())),
             "scopes": dict(sorted(scopes.items())),
             "required_checks": list(REQUIRED_CHECKS),
+            "scope_note": VALIDATION_SCOPE_NOTE,
         },
         "routing_diagnostics": routing,
         "routing_summary": routing_summary,
@@ -269,6 +274,8 @@ def render_markdown(report: dict) -> str:
         "# Benchpress comparison",
         "",
         f"Status: **{_escape(report['status'])}**. Design: `{_escape(report['design'])}`.",
+        "",
+        report["validation_coverage"]["scope_note"],
         "",
     ]
     if "smoke" in report["design"]:
@@ -477,6 +484,7 @@ def write_report(results_root: str | Path, report: dict) -> dict[str, str]:
                 {
                     **{key: value for key, value in case.items() if key != "metrics"},
                     "metric": metric,
+                    "validation_scope": report["validation_coverage"]["scope_note"],
                     **data,
                 }
             )
@@ -494,6 +502,7 @@ def write_report(results_root: str | Path, report: dict) -> dict[str, str]:
         "occupancy",
         "weight",
         "metric",
+        "validation_scope",
         "available",
         "baseline_mean",
         "evolve_mean",
