@@ -99,16 +99,6 @@ def evaluate_configuration(observations: Iterable[dict], *, seeds: list[int] | N
             reasons.append("missing_inserted_swap_evidence")
         else:
             inserted.append(count)
-        replay = item.get(
-            "routing_replay",
-            item.get("validation", {}).get("routing_replay")
-            if isinstance(item.get("validation"), dict)
-            else None,
-        )
-        if replay is not None and (
-            not isinstance(replay, dict) or replay.get("status") != "verified"
-        ):
-            reasons.append("routing_replay_unverified")
     if reasons:
         status = "unresolved"
     else:

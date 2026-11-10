@@ -10,9 +10,9 @@ from .errors import IntegrityError
 VERSION = 1
 PROTOCOLS = {
     "worker": "observation-worker-v1",
-    "instrumentation": "sabre-native-compositional-v2",
+    "instrumentation": "sabre-native-counts-v3",
     "metric": "native-n2-weighted-d2-v1",
-    "validation": "legality-routing-compositional-semantics-v3",
+    "validation": "target-legality-v4",
     "target": "directed-target-v1",
     "fixture": "bound-logical-ir-v1",
     "identity": "canonical-json-v1",

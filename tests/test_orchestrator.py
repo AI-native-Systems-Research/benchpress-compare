@@ -49,7 +49,7 @@ pathlib.Path("output.bin").write_bytes(artifact)
 receipt.update(schema_version=1, status=status, N2=20 if status == "SUCCEEDED" else None,
     D2=10 if status == "SUCCEEDED" else None,
     validation={"status": "verified" if status == "SUCCEEDED" else "error",
-        "checks": {name: {"status": "verified"} for name in ("target_legality", "layout", "routing", "semantics")}},
+        "checks": {"target_legality": {"status": "verified"}}},
     resources={"elapsed_seconds": 0.1, "peak_rss_bytes": 10_000_000},
     artifacts={"output.bin": hashlib.sha256(artifact).hexdigest()})
 if spec.get("fake_bad_identity"):

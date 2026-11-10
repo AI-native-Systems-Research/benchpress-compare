@@ -178,10 +178,8 @@ def _run_task(spec, output):
     from benchpress_compare.corpus.ir import export_circuit
     from benchpress_compare.metrics import measure
     from benchpress_compare.validation import (
-        layout_validation,
         summarize_validation,
         target_legality,
-        validate_semantics,
     )
     from .adapter import compile_observation
     from .starts import reviewed_start_source
@@ -219,18 +217,8 @@ def _run_task(spec, output):
     else:
         initial = list(compiled.layout.initial_index_layout(filter_ancillas=True))
         final = list(compiled.layout.final_index_layout(filter_ancillas=True))
-    semantics = validate_semantics(fixture["logical"], serialized, initial, final)
-    certificate = diagnostics["semantic_certificate"]
-    if semantics["status"] == "unsupported":
-        semantics = {**certificate, "bounded_oracle": semantics}
-    elif certificate["status"] in {"mismatch", "error"}:
-        semantics = {**certificate, "bounded_oracle": semantics,
-                     "reason": "contradictory_or_failed_semantic_certificate"}
     checks = {
         "target_legality": target_legality(serialized, snapshot),
-        "layout": layout_validation(initial, final, circuit.num_qubits, compiled.num_qubits),
-        "routing": diagnostics["routing_replay"],
-        "semantics": semantics,
     }
     if spec.get("phase") == "preflight":
         from benchpress_compare.corpus.embedding import search_embedding

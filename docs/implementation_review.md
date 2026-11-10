@@ -4,7 +4,16 @@ Review date: 2026-11-10. The implementation plan remains the comparison contract
 The full source-build comparison is **not yet complete**; the attempt log below
 distinguishes diagnostic checks from accepted benchmark observations.
 
-## Corrections from review
+The current contract is `target-legality-v4`: only recursive native target
+legality is required by circuit validation. Layout validation, routing replay,
+and semantic equivalence checks have been removed. Instrumentation
+`sabre-native-counts-v3` retains SABRE activity and native-boundary SWAP count
+deltas for admission. These checks do not establish behavioral equivalence.
+The corrections, test counts, and attempts below record earlier work; semantic
+certificates described there belong to the superseded validation contract and
+are not current acceptance requirements or reusable current-protocol evidence.
+
+## Historical corrections from review
 
 - Restored required semantic validation. Protocol v2 allowed unsupported
   semantics to pass; v3 requires verified semantics and prevents reuse of those
@@ -33,16 +42,25 @@ distinguishes diagnostic checks from accepted benchmark observations.
   during queued launches or interrupted preparation.
 - Fixed export discovery and verification of nested evolved builds, excluding
   their nonrelocatable virtual environments.
+- Pinned isolated build dependencies as well as runtime dependencies, including
+  both in cache identity and verified artifacts. This prevents legacy metadata
+  builds from failing with newer setuptools versions lacking `pkg_resources`.
+- Reused certified initialization snapshots and hashes across unchanged passes
+  to avoid repeated serialization of large circuits. Corrected report metadata
+  to include the required semantic check.
 
 Independent review of seed separation, exact weights, ratio-of-means scoring,
 geometric aggregation, missing-data behavior, and circuit counts found no
 additional mathematical defect.
 
-## Recorded validation
+## Historical validation evidence
 
 - Before the first full submission: **287 tests passed**; Ruff and
   `git diff --check` passed. Integration tests use the separately pinned Qiskit
   2.5.2 environment, so they do not replace checks of the supplied 2.6 sources.
+- Before restart: **290 tests passed**; Ruff and `git diff --check` passed.
+  The corrected hash-locked dependencies installed all 39 packages into a clean
+  environment and passed `uv pip check`.
 - The local corpus audit verified all 149 candidates and pinned assets at
   `4c04b38a53fc231a89f1a6bc9541c1b641ed6dcf`.
 - Normal-queue job **1486968** passed all thirteen shared-storage and
@@ -76,6 +94,7 @@ Screening must establish all 2,682 baseline observations before cohort freeze.
 | Attempt | Controller | Outcome |
 | --- | --- | --- |
 | 1 | 1489599 | Preparation failed in dependency-resolution job 1489609: an `ibm-platform-services` source build lacked `pkg_resources` in its isolated build environment. No benchmark observations collected; no LSF jobs remained after failure. |
+| 2 | 1496106 | Clean restart after the dependency and instrumentation fixes; in progress. Previous attempt retained under `logs/failed-run-001/`. |
 
 Acceptance still requires verified actual source builds, completed baseline
 admission and pilot, a frozen valid cohort, all planned paired comparison

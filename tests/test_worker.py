@@ -12,7 +12,6 @@ def test_native_budget_and_instrumentation_do_not_change_compilation():
     from benchpress_compare.targets import synthetic_target, import_target
     from benchpress_compare.worker.adapter import compile_observation, preset
     from benchpress_compare.corpus.ir import export_circuit
-    from benchpress_compare.metrics import measure
 
     circuit = qiskit.QuantumCircuit(4)
     for _ in range(3):
@@ -22,43 +21,141 @@ def test_native_budget_and_instrumentation_do_not_change_compilation():
     output, diagnostics, artifacts = compile_observation(circuit, target, 2, 1234)
     control, _ = preset(target, 2, 1234)
     clean = control.run(circuit)
-    assert measure(export_circuit(output)) == measure(export_circuit(clean))
+    assert export_circuit(output) == export_circuit(clean)
+    assert output.layout.initial_index_layout(True) == clean.layout.initial_index_layout(True)
+    assert output.layout.final_index_layout(True) == clean.layout.final_index_layout(True)
     assert diagnostics["sabre_executed"]
     assert diagnostics["inserted_swaps"] > 0
     assert diagnostics["native_calls"][0]["effective_trials"] == {
         "num_random_trials": 20,
         "num_swap_trials": 20,
     }
-    assert diagnostics["routing_replay"]["status"] == "verified"
-    assert "routing-0.json" in artifacts
+    assert diagnostics["protocol"] == "sabre-native-counts-v3"
+    assert "routing_replay" not in diagnostics
+    assert "semantic_certificate" not in diagnostics
+    assert set(artifacts) == {"initialization.json", "pre-layout.json"}
+
+
+def test_native_swap_counts_preserve_original_and_branch_swaps(monkeypatch):
+    qiskit = pytest.importorskip("qiskit")
+    import importlib
+    from qiskit.circuit import Gate
+    from qiskit.circuit.controlflow import IfElseOp
+    from qiskit.circuit.library import SwapGate
+    from qiskit.converters import circuit_to_dag
+    from benchpress_compare.worker.adapter import native_instrumentation
+
+    circuit = qiskit.QuantumCircuit(3, 1)
+    circuit.swap(0, 1)
+    with circuit.if_test((circuit.clbits[0], 1)):
+        circuit.swap(1, 2)
+    # The name alone must not make a custom operation a standard SWAP.
+    circuit.append(Gate("swap", 2, []), [0, 2])
+    dag = circuit_to_dag(circuit)
+
+    def routing(dag, num_trials):
+        dag.apply_operation_back(SwapGate(), [dag.qubits[0], dag.qubits[2]])
+        block = qiskit.QuantumCircuit(2)
+        block.swap(0, 1)
+        dag.apply_operation_back(
+            IfElseOp((dag.clbits[0], 1), block), [dag.qubits[1], dag.qubits[2]]
+        )
+        return dag, None
+
+    module = importlib.import_module("qiskit.transpiler.passes.routing.sabre_swap")
+    monkeypatch.setattr(module, "sabre_routing", routing)
+    diagnostics, artifacts = {"native_calls": []}, {}
+    with native_instrumentation(diagnostics, artifacts, {"status": "not_requested"}):
+        module.sabre_routing(dag, num_trials=20)
+    call = diagnostics["native_calls"][0]
+    assert call["explicit_swaps_before"] == 2
+    assert call["explicit_swaps_after"] == 4
+    assert call["inserted_swaps"] == 2
+    assert "replay" not in call
+    assert artifacts == {}
 
 
 def test_original_swap_elision_is_separate_from_inserted_routing_swaps():
     qiskit = pytest.importorskip("qiskit")
     from benchpress_compare.targets import synthetic_target, import_target
     from benchpress_compare.worker.adapter import compile_observation
-    from benchpress_compare.corpus.ir import export_circuit
-    from benchpress_compare.validation import validate_semantics
 
     circuit = qiskit.QuantumCircuit(3)
     circuit.h(0)
     circuit.swap(0, 1)
     circuit.cx(1, 2)
-    output, diagnostics, _ = compile_observation(
+    _, diagnostics, _ = compile_observation(
         circuit, import_target(synthetic_target("square", 3)), 2, 19
     )
     assert diagnostics["original_explicit_swaps"] == 1
     assert diagnostics["elided_permutations"]
     assert diagnostics["inserted_swaps"] == 0
-    assert (
-        validate_semantics(
-            export_circuit(circuit),
-            export_circuit(output),
-            output.layout.initial_index_layout(True),
-            output.layout.final_index_layout(True),
-        )["status"]
-        == "verified"
+
+
+def test_initialization_snapshot_is_captured_once_before_later_dag_mutations(monkeypatch):
+    qiskit = pytest.importorskip("qiskit")
+    from qiskit.circuit.library import XGate
+    from qiskit.transpiler import AnalysisPass, PassManager, StagedPassManager, TransformationPass
+    from benchpress_compare.corpus.ir import export_circuit
+    from benchpress_compare.metrics import structural_signature
+    from benchpress_compare.worker import adapter
+
+    class AppendIdentity(TransformationPass):
+        def run(self, dag):
+            dag.apply_operation_back(XGate(), [dag.qubits[0]])
+            dag.apply_operation_back(XGate(), [dag.qubits[0]])
+            return dag
+
+    class Unchanged(TransformationPass):
+        def run(self, dag):
+            return dag
+
+    class Inspect(AnalysisPass):
+        def run(self, dag):
+            self.property_set["inspected"] = True
+
+    class RemoveIdentity(TransformationPass):
+        def run(self, dag):
+            for node in list(dag.topological_op_nodes())[-2:]:
+                dag.remove_op_node(node)
+            return dag
+
+    manager = StagedPassManager(
+        stages=("init", "optimization"),
+        init=PassManager([AppendIdentity(), Inspect(), Unchanged()]),
+        optimization=PassManager([RemoveIdentity()]),
     )
+    monkeypatch.setattr(adapter, "preset", lambda *args: (manager, []))
+    exports, signatures = [], []
+
+    def tracked_export(circuit):
+        exports.append(circuit)
+        return export_circuit(circuit)
+
+    def tracked_signature(circuit):
+        signatures.append(circuit)
+        return structural_signature(circuit)
+
+    monkeypatch.setattr(adapter, "export_circuit", tracked_export)
+    monkeypatch.setattr(adapter, "structural_signature", tracked_signature)
+    original = qiskit.QuantumCircuit(2)
+    original.cx(0, 1)
+    initialized = original.copy()
+    initialized.x(0)
+    initialized.x(0)
+    output, diagnostics, artifacts = adapter.compile_observation(original, None, 2, 1)
+    assert export_circuit(output) == export_circuit(original)
+    assert artifacts["initialization.json"] == export_circuit(initialized)
+    assert diagnostics["pre_layout_structure_hash"] == canonical_hash(
+        structural_signature(export_circuit(initialized))
+    )
+    assert diagnostics["pre_layout_two_qubit_count"] == 1
+    assert [row["name"] for row in diagnostics["passes"]] == [
+        "AppendIdentity", "Inspect", "Unchanged", "RemoveIdentity",
+    ]
+    # Only the completed initialization stage needs serialization and hashing.
+    assert len(exports) == 1
+    assert len(signatures) == 1
 
 
 def test_worker_fresh_process_receipt_and_artifacts(tmp_path):
@@ -106,6 +203,9 @@ def test_worker_fresh_process_receipt_and_artifacts(tmp_path):
     assert process.returncode == 0, receipt
     assert receipt["status"] == "SUCCEEDED"
     assert receipt["validation"]["status"] == "verified"
+    assert set(receipt["validation"]["checks"]) == {"target_legality"}
+    assert "semantic-passes.json" not in receipt["artifacts"]
+    assert not any(name.startswith("routing-") for name in receipt["artifacts"])
     assert receipt["N2"] == 1
     for field in (
         "observation_id",
@@ -147,7 +247,8 @@ def test_attempt_receipt_is_immutable(tmp_path):
         run_spec({"output_dir": str(tmp_path)})
 
 
-def test_exact_output_equality_cannot_hide_a_conclusive_failed_pass_certificate(tmp_path, monkeypatch):
+@pytest.mark.parametrize("native", [True, False])
+def test_observation_checks_only_output_target_legality(tmp_path, monkeypatch, native):
     qiskit = pytest.importorskip("qiskit")
     from benchpress_compare.corpus.ir import export_circuit
     from benchpress_compare.targets import synthetic_target
@@ -155,6 +256,11 @@ def test_exact_output_equality_cannot_hide_a_conclusive_failed_pass_certificate(
 
     original = qiskit.QuantumCircuit(2)
     original.h(0)
+    compiled = qiskit.QuantumCircuit(2)
+    if native:
+        compiled.x(0)
+    else:
+        compiled.h(0)
     encoded = export_circuit(original)
     atomic_write_json(tmp_path / "fixture.json", {
         "schema_version": 1, "logical": encoded, "fixture_hash": canonical_hash(encoded),
@@ -162,19 +268,14 @@ def test_exact_output_equality_cannot_hide_a_conclusive_failed_pass_certificate(
     atomic_write_json(tmp_path / "target.json", synthetic_target("square", 2))
     monkeypatch.setattr(
         "benchpress_compare.worker.adapter.compile_observation",
-        lambda *args, **kwargs: (original, {
-            "routing_replay": {"status": "verified"},
-            "semantic_certificate": {"status": "mismatch", "reason": "wrong_reported_layout"},
-        }, {}),
+        lambda *args, **kwargs: (compiled, {}, {}),
     )
     result, _ = _run_task({
         "fixture_path": str(tmp_path / "fixture.json"),
         "target_path": str(tmp_path / "target.json"), "level": 2, "seed": 1,
     }, tmp_path)
-    assert result["status"] == "INVALID"
-    semantics = result["validation"]["checks"]["semantics"]
-    assert semantics["status"] == "mismatch"
-    assert semantics["bounded_oracle"]["status"] == "verified"
+    assert result["status"] == ("SUCCEEDED" if native else "INVALID")
+    assert set(result["validation"]["checks"]) == {"target_legality"}
 
 
 def test_runtime_attestation_checks_host_abi_and_machine(tmp_path):

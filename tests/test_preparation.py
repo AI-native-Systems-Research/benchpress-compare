@@ -113,8 +113,9 @@ def fake_preparation(monkeypatch):
                         "validation": {
                             "status": "unsupported" if invalid else "verified",
                             "checks": {
-                                name: {"status": "unsupported" if invalid else "verified"}
-                                for name in ("target_legality", "layout", "routing", "semantics")
+                                "target_legality": {
+                                    "status": "unsupported" if invalid else "verified"
+                                }
                             },
                         },
                         "diagnostics": {"sabre_executed": True, "inserted_swaps": 10},

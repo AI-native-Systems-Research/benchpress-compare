@@ -617,9 +617,9 @@ def prepare(config: RunConfig, *, continue_existing=False, retry_cancelled=False
                 "transpile_contract": TRANSPILE_CONTRACT,
                 "validation_policy": {
                     "protocol": PROTOCOLS["validation"],
-                    "required": ["target_legality", "layout", "routing", "semantics"],
+                    "required": ["target_legality"],
                     "disclosed": [],
-                    "semantics": "exact bounded oracle or verified compositional certificates; "
+                    "target_legality": "recursive native target legality; "
                     "unsupported, mismatch or error invalidates the observation",
                     "embedding": {
                         "algorithm": "checked-cz-subgraph-v1",

@@ -3,6 +3,11 @@
 Prepared 2026-11-09. **Status: implementation proposal. No builds, eligibility
 screening, cluster jobs, or benchmark collection have been run for this plan.**
 
+Validation contract updated 2026-11-10: `target-legality-v4` requires only
+recursive native target legality. `sabre-native-counts-v3` preserves routing
+activity and SWAP count diagnostics for admission. Layout validation, routing
+replay, and semantic equivalence checks are outside the current contract.
+
 ## 1. Objective and source of truth
 
 Implement the [high-level design](high_level_design.md): compare two Qiskit source
@@ -40,6 +45,7 @@ pass/fail policy. Parallel instrumented timings are resource-planning diagnostic
 | Compiler settings | Full preset transpilation; no supplied initial layout; `approximation_degree=1.0`; 20 layout trials, 20 layout-swap trials, and 20 standalone routing trials where executed. Preserve level-specific iterations and record deterministic starts. |
 | Arm configuration | Compare the supplied folders with identical harness settings. Do not inject wait-time or other heuristic changes unless explicitly declared in the frozen configuration. |
 | Admission | Baseline only, three independent preflight seeds, SABRE executed in every seed and median inserted SWAP count at least 10 in each of six configurations; no verified zero-routing embedding; supported metrics and validation. |
+| Circuit validation | Recursive native target legality only; no layout validation, routing replay, or semantic equivalence guarantee. |
 | Cohort | Freeze admission, exclusions, seeds, labels, targets, validation policy, and exact weights before any evolve benchmark measurement. An evolved SABRE bypass does not remove a case. |
 | Seeds | Identical comparison seeds for both builds; all planned seeds required; comparison seeds never overlap preflight or pilot seeds for a case. |
 | Scores | Ratio of arithmetic seed means, then weighted geometric mean, independently for N2 and D2. Missing or unusable ratios never trigger survivor reweighting. |
@@ -98,7 +104,7 @@ flowchart TD
 | `corpus/` | Checked-in candidate catalogue, pinned asset lookup, fixture construction, aliases, structural deduplication. |
 | `targets.py` | Exact graph sizing, target serialization, provider snapshot extraction, import validation. |
 | `worker/` | Build-specific imports, preset adapter, pass instrumentation, observation protocol, process receipt. |
-| `metrics.py`, `validation/` | Versioned N2/D2, recursive target legality, routing replay, semantic validation evidence. |
+| `metrics.py`, `validation/` | Versioned N2/D2 and recursive native target-legality evidence. |
 | `eligibility.py`, `weights.py`, `seeds.py` | Baseline admission, exact rational allocations, domain-separated seed lists. |
 | `pilot.py`, `planner.py` | Resource measurements, worker recommendations, case bundles, LSF packing. |
 | `store.py`, `journal.py` | Atomic artifacts, cache lookup/publication, leases, event journal and checkpoints. |
@@ -123,7 +129,7 @@ through a developer-specific path.
 | [qtb build support](../../../qiskit-transpile-bench/src/qtb/envbuild/__init__.py) | Content snapshots, wheel construction, dependency locks, native import checks. | Make release policy explicit; extend ABI/CPU checks. qtb overrides release LTO/codegen settings, which must not be inherited silently. |
 | [qtb store](../../../qiskit-transpile-bench/src/qtb/coordinator/store.py), [storage](../../../qiskit-transpile-bench/src/qtb/coordinator/storage.py) | Complete-entry publication, final-path virtual environments, fenced host locks. | New namespace and keys; per-observation reuse; verify actual shared-filesystem behavior. |
 | [qtb worker adapter](../../../qiskit-transpile-bench/worker/qtb_worker/adapter.py) | Typed fixture/target serialization, layout records, pass-boundary snapshots. | Verify support for this full corpus, conditions, resets, custom definitions, and both build versions. |
-| [qtb metrics](../../../qiskit-transpile-bench/src/qtb/metrics/__init__.py), [routing replay](../../../qiskit-transpile-bench/src/qtb/metrics/replay.py) | Streaming metrics and permutation-aware static routing replay. | Existing D2 rejects control flow and static replay returns unverified for it. Implement and test the required extensions. |
+| [qtb metrics](../../../qiskit-transpile-bench/src/qtb/metrics/__init__.py) | Streaming metrics. | Existing D2 rejects control flow; implement and test recursive metric support. Routing replay is not part of the current contract. |
 | [existing balanced comparison](../../../qiskit-transpile-bench/compare_to_baseline_benchpress/README.md) | Freeze/resume structure and reporting examples. | Its generated circuits, target sizes, corpus pin, weights, and forced evolved heuristic define a different experiment. |
 | [bpkit planner](../../../bpkit/bpkit/plan.py), [controller](../../../bpkit/remote/controller.py), [shard worker](../../../bpkit/remote/run_shard.py) | Cost-aware ordering, controller-as-job, durable submission intent, receipts and reconciliation. | Remove fixed corpus/shards, queue/reservation paths, two-thread assumptions, and whole-arm retry behavior. |
 
@@ -217,7 +223,7 @@ versions rather than interpreting them approximately.
 | `BuildManifest` | Snapshot, toolchain, build backend, resolved dependencies, Python/ABI/platform, CPU features, effective release flags, wheel/native hashes, environment/harness identity, verification evidence. |
 | `InputFixture` | Canonical input ID and aliases, source record/path, corpus hash, logical artifact hash, declared/active width, family/recipe/band, parameter bindings, initialization/ancilla semantics, deduplication evidence. |
 | `TargetSnapshot` | Class and snapshot ID, physical width, ordered edges/instruction support, calibration and timing properties including absence, provider provenance, canonical hash. |
-| `EligibilityRecord` | Three baseline seeds per target/level; pass/SWAP evidence; embedding and semantic support status; admission/exclusion/unresolved reason; policy version. |
+| `EligibilityRecord` | Three baseline seeds per target/level; pass/SWAP diagnostics; embedding, metric and target-legality status; admission/exclusion/unresolved reason; policy version. |
 | `Case` | Input/target hashes, level, configuration hash, stable case ID, occupancy, exact weight factors and main/sensitivity weights, comparison seeds. |
 | `ObservationSpec` | Case, phase, build, seed, worker/instrumentation/metric/validation identities, runtime profile, logical observation ID. |
 | `Attempt` | Observation ID, attempt ID, executor/job ID, submission token, lease generation, timestamps, host receipt, resource usage, exit classification, logs and artifact hashes. |
@@ -387,7 +393,7 @@ rotation changes the logical input even if the routing workload is shared. Deriv
 structural signatures at frozen baseline pre-layout boundaries, including ordered
 two-qubit operations, wire mappings, and block context, ignoring one-qubit gates
 and angles as specified. Retain signatures across all target/level/preflight
-contexts; collapse workloads only where the required equivalence is verified.
+contexts; collapse workloads only where the routing-structure signatures match.
 Ambiguous/context-dependent matches remain flagged for preparation review.
 
 Use the subset's named canonical priority for its five variant pairs. At most one
@@ -440,9 +446,11 @@ The compatibility adapter must confirm effective SABRE parameters on executed
 passes; merely setting an unused attribute is insufficient. Capture integrated
 routing in `SabreLayout`, standalone `SabreSwap` when present, initialization and
 layout/routing boundaries, VF2 outcome, layout permutations, and final output.
-Separate original input SWAPs, elided permutations, and inserted routing SWAPs.
-Replay evidence must establish inserted SWAP counts; do not infer them from final
-N2 or assume every SWAP after layout was newly inserted. Record relative burden
+Count SWAPs immediately before and after each native routing call, including
+conditional bodies, and use their delta as the routing-burden diagnostic.
+Preserve the before/after counts and the boundary identity; do not infer the
+delta from final N2 or count all output SWAPs as newly inserted. No routing
+replay or permutation validation is performed. Record relative burden
 against the pre-layout two-qubit workload with explicit zero-denominator handling.
 
 Use observation-scoped instrumentation that does not force SABRE or change the
@@ -481,32 +489,26 @@ its version in every observation/cache key.
 
 ### Validation and honest coverage
 
-Make required checks a fixture-specific, frozen contract, with statuses `verified`,
-`mismatch`, `unsupported`, and `error`. Store their actual scope, input assumptions,
-and evidence. Required `unsupported` or `error` is not success.
+Freeze `target-legality-v4` with one required check, `target_legality`, and statuses
+`verified`, `mismatch`, `unsupported`, and `error`. Store its actual scope and
+evidence. Only `verified` satisfies the gate.
 
-1. Check fixture/target/import identity and recursive native instruction legality,
-   including directed qubits, conditions, reset, and measurement support.
-2. Validate initial/final layout permutations, ancilla handling, and preservation
-   of observable classical bits. Perform exact routing replay between compatible
-   pass boundaries; extend it to preserve measurement/reset events and branch
-   entry/exit mappings. Verify any branch reconciliation permutations.
-3. Use exact unitary or instrument/channel checks on bounded fixtures and local
-   transformation blocks where tractable. Add small semantic analogues of the
-   dynamic corpus cases to test the validator itself, including bad transformations.
-   A unitary-only comparison cannot validate BWT resets or QEC measurements.
-4. For large circuits, use scalable structural/semantic certificates for the
-   supported transformations and explicitly record which stages they cover.
-   Routing replay alone does not prove synthesis or final optimization equivalent.
-   Do not promise full 133-qubit state simulation or call target legality a proof
-   of full equivalence. If a required semantic check cannot be established, retain
-   an unresolved preparation result or an invalid measured observation.
+Check recursive native instruction legality, including operation identity,
+directed physical qubits, fixed parameters, capacity, and support inside
+conditional branches for operations such as reset and measurement. Fixture,
+target, and import identity checks remain separate integrity requirements.
 
-The dynamic-validation spike is a delivery gate: `cc_n12/32/64`, `bwt_n21/37`,
-`qec9xz_n17`, and `seca_n11` cannot be admitted merely because they compile. The
-existing qtb dynamic oracle is width-bounded and starts from an all-zero state;
-it is useful for tests but is not a ready full-corpus proof. Document the implemented
-validation coverage beside all resulting scores.
+Do not run initial/final layout validation, routing replay, bounded simulation,
+or compositional semantic checks. Layout maps may remain diagnostic artifacts.
+Routing activity and native-boundary SWAP count deltas remain admission evidence
+under `sabre-native-counts-v3`; they do not certify routing correctness.
+
+Dynamic fixtures `cc_n12/32/64`, `bwt_n21/37`, `qec9xz_n17`, and `seca_n11` require
+supported imports, metrics, target legality, and routing diagnostics. They do not
+require semantic equivalence evidence. Document this scope beside all scores:
+an accepted circuit is compatible with the target, but its behavior has not been
+compared with the input circuit. Historical semantic-validation spikes do not
+provide reusable observations under the new protocol.
 
 ## 9. Baseline admission, seeds, and weight freeze
 
@@ -854,10 +856,10 @@ metric/validation feasibility until after building the scheduler.
 
 | Milestone | Dependencies | Deliverables and acceptance gate |
 | --- | --- | --- |
-| **M0 — Contracts and feasibility** | None | Package skeleton; schema/error model; explicit metric/dynamic-validation contract; supported toolchain lock; inventory audit script. Use a disposable spike in representative pinned release environments to demonstrate hard fixture representation and a feasible validation approach. Actual user builds are rechecked after M1/M2. Record unresolved capability as a blocker to full-corpus delivery. |
+| **M0 — Contracts and feasibility** | None | Package skeleton; schema/error model; explicit metric/target-legality contract; supported toolchain lock; inventory audit script. Use a disposable spike in representative pinned release environments to demonstrate hard fixture representation, recursive metrics, and target legality. Actual user builds are rechecked after M1/M2. Record unresolved capability as a blocker to full-corpus delivery. |
 | **M1 — Build and store foundation** | M0 | Source snapshots, verified release wheels/environments, atomic bundles, leases, new cache namespace. Dirty sources change keys; debug/incompatible artifacts fail verification; concurrent builds cannot publish partial entries. |
 | **M2 — Corpus and target freeze** | M0, M1 | Reviewed 149-candidate catalogue plus coverage, loaders, canonical IDs, typed fixtures, parameter binding, exact targets and importer checks. All assets resolve at the pinned revision; both builds round-trip equivalent logical/target identities. |
-| **M3 — Observation and validation worker** | M1, M2 | Fresh-process protocol, 20/20/20 settings, integrated SABRE evidence, recursive N2/D2, target/layout/routing and semantic checks, resource telemetry, watchdog cleanup. Small adversarial fixtures detect incorrect metrics, illegal targets, and altered dynamic semantics. |
+| **M3 — Observation and validation worker** | M1, M2 | Fresh-process protocol, 20/20/20 settings, integrated SABRE activity and SWAP count diagnostics, recursive N2/D2, target-legality checks, resource telemetry, watchdog cleanup. Small adversarial fixtures detect incorrect metrics and illegal native operations, including conditional bodies. |
 | **M4 — Admission and weight audit** | M2, M3 | Baseline-only screening, embedding evidence, structural deduplication, seed streams, exact weights/sensitivity, coverage report, freeze gates. All 149 candidates get a disposition; unresolved mandatory evidence blocks normal freeze; no evolved quality is consulted. |
 | **M5 — Pilot and execution planning** | M3, M4 | Pilot measurements, CPU/memory sizing, resource profiles, deterministic local/LSF packing, estimates, final plan publication. No work is dropped/duplicated; zero capacity and oversized tasks produce explicit errors; both arms receive matching profiles. |
 | **M6 — Local end-to-end orchestration** | M1, M3–M5 | Durable task/attempt state, local executor, bounded retry, cache ingestion, interruption/resume. An interrupted small A/A run completes without repeating committed observations and matches an uninterrupted run. |
@@ -879,7 +881,7 @@ its cohort/weight portion.
 | Sources/builds | Dirty/untracked/deleted content; executable bits; symlink escape; submodules; mutation during snapshot; release flags; dependency/ABI/CPU mismatches; imported wheel/native hashes. |
 | Store | Concurrent same-key publication; crash before marker; stale lease fencing; corrupted artifact; final-path environment; store survives deletion of originating results directory; phase and seed cache separation. |
 | Fixtures/targets | Catalogue counts and aliases; HamLib lookup/hash; parameter and term-order preservation; active-width bands; capacity boundaries; complete heavy-hex rather than patches; directed calibration round trips. |
-| Metrics/validation | Disjoint versus serial two-qubit gates; barriers and classical dependencies; nested mapped branches; measurement/reset/reused wires; original versus inserted SWAPs; wrong final layout; illegal native edge; branch-state corruption; unsupported loops. |
+| Metrics/validation | Disjoint versus serial two-qubit gates; barriers and classical dependencies; nested mapped branches; measurement/reset/reused wires; native-boundary SWAP count deltas; illegal native edge or operation identity; fixed parameters; unsupported loops. |
 | Admission/seeds | 9/10 threshold medians; SABRE absent in one seed; verified-local despite VF2 failure; unresolved timeout; variant priority; seed reproducibility and collision handling; disjoint namespaces; larger-seed prefix reuse. |
 | Weights | Exact full-inventory marginals; missing bands; empty family; aliases; changed active widths; recipe multiplicity; sensitivity weights; no reweighting after missing observations. |
 | Aggregation | Ratio of means differs from mean of ratios; geometric weights differ from arithmetic averaging; one circuit counted once; mixed N2/D2 direction; composite/empty slices; missing one seed; all zero cases; exact equality despite rounded display; complete overall score equals the geometric mean of L2/L3 scores; uniform scaling returns that multiplier. |
@@ -900,15 +902,15 @@ execute, resume, and report a real comparison locally and on LSF; baseline work 
 reused only under verified compatible identities; every planned observation has a
 visible disposition; and all required score/slice/count rules have evidence.
 An unavailable score caused by genuine input/build failure is a supported outcome,
-but missing infrastructure or unsupported required corpus semantics is not a
+but missing infrastructure or unsupported required corpus representations is not a
 completed implementation.
 
 The design review identified these issues to address explicitly during delivery:
 
 - The 138-input allocation is conditional. Screening includes another 11
   candidates and must finish before recalculating weights.
-- Existing qtb dynamic metrics/replay cannot be adopted unchanged. Semantic
-  support, metric conventions, and validation coverage are early gates.
+- Existing qtb dynamic metrics cannot be adopted unchanged. Representation
+  support, metric conventions, and recursive target legality are early gates.
 - Reference runners use different experiments and heuristic defaults. Reuse
   components without inheriting their corpus, target, or arm policy.
 - Release provenance, ABI/CPU compatibility, and durable publication are distinct
@@ -921,6 +923,6 @@ The design review identified these issues to address explicitly during delivery:
   repaired by changing the score's population after seeing evolve results.
 
 These findings are incorporated into the contracts, milestone gates, and tests
-above. Actual Qiskit compatibility, dynamic validation feasibility, admitted
+above. Actual Qiskit compatibility, dynamic metric/legality support, admitted
 cohort size, runtime, memory, and site-specific LSF behavior remain measurements
 to establish during implementation; this plan does not claim they are verified.

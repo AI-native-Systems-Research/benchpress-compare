@@ -9,9 +9,8 @@ from contextlib import contextmanager
 from benchpress_compare.corpus.ir import export_circuit
 from benchpress_compare.identity import canonical_hash
 from benchpress_compare.metrics import structural_signature
-from benchpress_compare.validation import routing_replay
 
-INSTRUMENTATION_PROTOCOL = "sabre-native-compositional-v2"
+INSTRUMENTATION_PROTOCOL = "sabre-native-counts-v3"
 
 
 class AdapterIncompatible(RuntimeError):
@@ -24,6 +23,18 @@ def _passes(controller):
             yield from _passes(task)
     else:
         yield controller
+
+
+def _explicit_swaps(operations):
+    """Count standard SWAP instructions, including every conditional body."""
+    from qiskit.circuit.library import SwapGate
+
+    return sum(
+        int(op.base_class is SwapGate)
+        + sum(_explicit_swaps(item.operation for item in block.data)
+              for block in getattr(op, "blocks", ()))
+        for op in operations
+    )
 
 
 def preset(target, level, seed):
@@ -106,8 +117,8 @@ def native_instrumentation(diagnostics: dict, artifacts: dict, native_start_sour
                         f"Executed {__name} {name}={bound.arguments[name]}, expected {value}"
                     )
             before_dag = bound.arguments["dag"]
-            before = export_circuit(dag_to_circuit(before_dag))
             before_qubits = before_dag.num_qubits()
+            swaps_before = _explicit_swaps(node.op for node in before_dag.op_nodes())
             native = {
                 "function": __name,
                 "effective_trials": dict(__expected),
@@ -119,6 +130,11 @@ def native_instrumentation(diagnostics: dict, artifacts: dict, native_start_sour
             if __name == "sabre_layout_and_routing":
                 from .starts import native_start_templates
 
+                before = export_circuit(dag_to_circuit(before_dag))
+                signature = structural_signature(before)
+                diagnostics["pre_layout_structure_hash"] = canonical_hash(signature)
+                diagnostics["pre_layout_two_qubit_count"] = len(signature)
+                artifacts["pre-layout.json"] = before
                 starts = native_start_templates(
                     bound.arguments["target"], before_qubits, bound.arguments, native_start_source
                 )
@@ -126,33 +142,16 @@ def native_instrumentation(diagnostics: dict, artifacts: dict, native_start_sour
                     raise AdapterIncompatible(f"Cannot attest effective SABRE starting layouts: {starts}")
                 native["starting_layouts"] = starts
             result = __function(*args, **kwargs)
-            index = len(diagnostics["native_calls"])
-            if __name == "sabre_layout_and_routing":
-                after_dag, initial, final = result
-            else:
-                after_dag, final = result
-                initial = bound.arguments["initial_layout"]
-            if __name == "sabre_layout_and_routing":
-                diagnostics["pre_layout_structure_hash"] = canonical_hash(
-                    structural_signature(before)
-                )
-                artifacts["pre-layout.json"] = before
             if not native["skip_routing"]:
-                after = export_circuit(dag_to_circuit(after_dag))
-                initial_map = [initial.virtual_to_physical(q) for q in range(before_qubits)]
-                final_map = [final.virtual_to_physical(q) for q in range(before_qubits)]
-                replay = routing_replay(before, after, initial_map, final_map)
-                native["replay"] = replay
-                artifact = {
-                    "schema_version": 1,
-                    "before": before,
-                    "after": after,
-                    "initial": initial_map,
-                    "final": final_map,
-                    "replay": replay,
-                    "native_call": __name,
-                }
-                artifacts[f"routing-{index}.json"] = artifact
+                after_dag = result[0]
+                swaps_after = _explicit_swaps(node.op for node in after_dag.op_nodes())
+                # Native routing retains original instructions and adds SWAPs.
+                # This is a count diagnostic, not an equivalence certificate.
+                native.update(
+                    explicit_swaps_before=swaps_before,
+                    explicit_swaps_after=swaps_after,
+                    inserted_swaps=swaps_after - swaps_before,
+                )
             diagnostics["native_calls"].append(native)
             return result
 
@@ -167,21 +166,14 @@ def native_instrumentation(diagnostics: dict, artifacts: dict, native_start_sour
 
 def compile_observation(circuit, target, level, seed, *, native_start_source=None):
     from qiskit.converters import dag_to_circuit
-    from benchpress_compare.validation.passes import PassCertificates
+    from qiskit.transpiler import AnalysisPass
 
     manager, configured = preset(target, level, seed)
-    original = export_circuit(circuit)
     native_start_source = native_start_source or {
         "status": "not_requested", "reason": "no_attested_source_build"
     }
     if native_start_source.get("status") not in {"verified", "not_requested"}:
         raise AdapterIncompatible(f"Cannot attest SABRE starting-layout policy: {native_start_source}")
-
-    def original_swaps(body):
-        return sum(
-            int(op["name"] == "swap") + sum(original_swaps(b) for b in op.get("blocks", []))
-            for op in body["operations"]
-        )
 
     diagnostics = {
         "schema_version": 1,
@@ -192,11 +184,23 @@ def compile_observation(circuit, target, level, seed, *, native_start_source=Non
         "passes": [],
         "sabre_executed": False,
         "inserted_swaps": None,
-        "original_explicit_swaps": original_swaps(original),
+        "original_explicit_swaps": _explicit_swaps(item.operation for item in circuit.data),
         "elided_permutations": [],
     }
     artifacts = {}
-    certificates = PassCertificates(circuit, diagnostics, artifacts)
+
+    class CaptureInitialization(AnalysisPass):
+        def run(self, dag):
+            initialized = export_circuit(dag_to_circuit(dag))
+            signature = structural_signature(initialized)
+            diagnostics["pre_layout_structure_hash"] = canonical_hash(signature)
+            diagnostics["pre_layout_two_qubit_count"] = len(signature)
+            artifacts["initialization.json"] = initialized
+
+    initialization_snapshot = CaptureInitialization()
+    if getattr(manager, "init", None) is not None:
+        # Capture once before later stages can mutate this DAG in place.
+        manager.init.append(initialization_snapshot)
     stage_map = {}
     for stage in manager.expanded_stages:
         stage_manager = getattr(manager, stage)
@@ -205,19 +209,14 @@ def compile_observation(circuit, target, level, seed, *, native_start_source=Non
                 stage_map[id(pass_)] = stage
 
     def callback(**kwargs):
-        pass_, dag = kwargs["pass_"], kwargs["dag"]
+        pass_ = kwargs["pass_"]
+        if pass_ is initialization_snapshot:
+            return
         name = type(pass_).__name__
         stage = stage_map.get(id(pass_))
         diagnostics["passes"].append({"name": name, "stage": stage, "seconds": kwargs.get("time")})
-        certificates.observe(pass_, dag, kwargs["property_set"])
         if name in {"SabreLayout", "SabreSwap"}:
             diagnostics["sabre_executed"] = True
-        if stage == "init":
-            initialized = export_circuit(dag_to_circuit(dag))
-            diagnostics["pre_layout_structure_hash"] = canonical_hash(
-                structural_signature(initialized)
-            )
-            artifacts["initialization.json"] = initialized
         if name in {"VF2Layout", "VF2PostLayout"}:
             diagnostics.setdefault("vf2", []).append(
                 {"pass": name, "status": str(kwargs["property_set"].get("VF2Layout_stop_reason"))}
@@ -242,32 +241,12 @@ def compile_observation(circuit, target, level, seed, *, native_start_source=Non
 
     with native_instrumentation(diagnostics, artifacts, native_start_source):
         output = manager.run(circuit, callback=callback)
-    diagnostics["semantic_certificate"] = certificates.finish(output)
-    replay = [call["replay"] for call in diagnostics["native_calls"] if "replay" in call]
     if diagnostics["sabre_executed"] and not diagnostics["native_calls"]:
         raise AdapterIncompatible("Executed SABRE pass did not enter an attested native boundary")
-    if replay and all(r["status"] == "verified" for r in replay):
-        diagnostics["inserted_swaps"] = sum(r["inserted_swaps"] for r in replay)
-        diagnostics["routing_replay"] = {
-            "status": "verified",
-            "covers": ["all_executed_sabre_boundaries"],
-            "boundaries": len(replay),
-        }
-    elif replay:
-        diagnostics["routing_replay"] = next(r for r in replay if r["status"] != "verified")
-    elif not diagnostics["sabre_executed"]:
-        # Bypass is valid for evolve. A full end-to-end semantic certificate is
-        # still required before this observation is accepted.
-        diagnostics["inserted_swaps"] = 0
-        diagnostics["routing_replay"] = {
-            "status": "verified",
-            "covers": [],
-            "reason": "sabre_bypassed_no_boundary",
-        }
-    else:
-        diagnostics["routing_replay"] = {"status": "unsupported", "reason": "no_routing_boundary"}
-    before = artifacts.get("pre-layout.json", artifacts.get("initialization.json"))
-    workload = len(structural_signature(before)) if before is not None else None
+    diagnostics["inserted_swaps"] = sum(
+        call.get("inserted_swaps", 0) for call in diagnostics["native_calls"]
+    )
+    workload = diagnostics.get("pre_layout_two_qubit_count")
     diagnostics["pre_layout_two_qubit_count"] = workload
     swaps = diagnostics["inserted_swaps"]
     diagnostics["relative_routing_burden"] = {

@@ -26,7 +26,7 @@ def records(counts=(9, 10, 11)):
                 "status": "verified",
                 "checks": {
                     name: {"status": "verified"}
-                    for name in ("target_legality", "layout", "routing", "semantics")
+                    for name in ("target_legality",)
                 },
             },
             "sabre_executed": True,
@@ -59,22 +59,16 @@ def test_summary_label_does_not_substitute_for_required_validation_evidence():
     observations[0]["validation"] = {"status": "verified"}
     assert evaluate_configuration(observations)["status"] == "unresolved"
     # An observation cannot declare a required certificate optional to bypass
-    # the admission contract, including when the semantic oracle is unsupported.
+    # the admission contract when target legality is unsupported.
     observations = records()
-    observations[0]["validation"]["checks"]["semantics"] = {
+    observations[0]["validation"]["checks"]["target_legality"] = {
         "status": "unsupported",
         "required": False,
     }
     assert evaluate_configuration(observations)["status"] == "unresolved"
     observations = records()
-    observations[0]["validation"]["checks"]["semantics"] = {
+    observations[0]["validation"]["checks"]["target_legality"] = {
         "status": "mismatch",
-        "required": False,
-    }
-    assert evaluate_configuration(observations)["status"] == "unresolved"
-    observations = records()
-    observations[0]["validation"]["checks"]["routing"] = {
-        "status": "unsupported",
         "required": False,
     }
     assert evaluate_configuration(observations)["status"] == "unresolved"
@@ -89,7 +83,6 @@ def test_summary_label_does_not_substitute_for_required_validation_evidence():
         {"validation": {"status": "unsupported"}},
         {"inserted_swaps": None},
         {"sabre_executed": None},
-        {"routing_replay": {"status": "mismatch"}},
     ],
 )
 def test_failures_are_unresolved_not_evidence_of_locality(change):

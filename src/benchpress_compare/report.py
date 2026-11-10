@@ -13,6 +13,7 @@ from typing import Iterable, Mapping
 
 from .aggregate import METRICS, aggregate, normalize_query, select_cases
 from .identity import atomic_write_json, fsync_directory
+from .validation import REQUIRED_CHECKS
 from .weights import fraction_record, read_fraction
 
 REPORT_PROTOCOL = "benchpress-report-v1"
@@ -117,8 +118,6 @@ def build_report(
     ]
     validations = Counter()
     scopes = Counter()
-    semantic_statuses = Counter()
-    semantic_reasons = Counter()
     routing = []
     resources = []
     for item in relevant:
@@ -129,14 +128,10 @@ def build_report(
         if isinstance(validation, dict):
             checks = validation.get("checks", [])
             if isinstance(checks, dict):
-                semantic = checks.get("semantics")
-                if isinstance(semantic, dict):
-                    semantic_statuses[str(semantic.get("status", "missing"))] += 1
-                    if semantic.get("status") != "verified":
-                        semantic_reasons[str(semantic.get("reason", "unspecified"))] += 1
-                else:
-                    semantic_statuses["missing"] += 1
-                checks = list(checks.values())
+                checks = [
+                    dict(check, name=name) if isinstance(check, dict) else check
+                    for name, check in checks.items()
+                ]
             for check in checks:
                 if isinstance(check, dict):
                     scope = check.get("scope", check.get("name", "unspecified"))
@@ -234,14 +229,7 @@ def build_report(
         "validation_coverage": {
             "statuses": dict(sorted(validations.items())),
             "scopes": dict(sorted(scopes.items())),
-            "required_checks": ["target_legality", "layout", "routing"],
-            "semantics": {
-                "statuses": dict(sorted(semantic_statuses.items())),
-                "reasons": dict(sorted(semantic_reasons.items())),
-                "note": "Exact semantic equivalence is certified only where the bounded "
-                "oracle applies; other observations are certified by native legality, "
-                "layout validity and exact routing replay, not full equivalence.",
-            },
+            "required_checks": list(REQUIRED_CHECKS),
         },
         "routing_diagnostics": routing,
         "routing_summary": routing_summary,
@@ -347,9 +335,7 @@ def render_markdown(report: dict) -> str:
         f"Validation scopes: `{_escape(json.dumps(report['validation_coverage']['scopes'], sort_keys=True))}`.",
         "",
         f"Required certificates: `{_escape(json.dumps(report['validation_coverage'].get('required_checks', []), sort_keys=True))}`. "
-        f"Semantic oracle coverage: `{_escape(json.dumps(report['validation_coverage'].get('semantics', {}).get('statuses', {}), sort_keys=True))}`. "
-        "Every accepted observation requires verified semantics in addition to legality, layout and routing. "
-        "Unsupported semantic evidence cannot satisfy the frozen validation contract.",
+        "Every accepted observation requires verified native target legality.",
         "",
     ]
     if report.get("coverage"):

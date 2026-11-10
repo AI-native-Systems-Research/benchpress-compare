@@ -8,11 +8,12 @@ Qiskit; each measurement uses the selected build's isolated worker environment.
 
 **Implementation status:** this repository contains the package, local and LSF
 execution adapters, durable storage, scientific calculations, reports, and tests.
-The frozen validation contract requires verified native legality, layout
-validity, exact routing replay and semantic equivalence for every accepted
-observation. Semantics must be established by an exact bounded oracle or verified
-compositional certificates covering the compiler transformations. Unsupported,
-mismatching or erroneous semantic evidence cannot satisfy admission or collection.
+The frozen validation contract (`target-legality-v4`) requires verified native
+target legality for every accepted observation. Layout validation, routing replay,
+and semantic equivalence checks are not performed. SABRE activity and native-boundary
+SWAP count deltas remain admission diagnostics under `sabre-native-counts-v3`.
+Accepted results establish target compatibility, not behavioral equivalence with
+the input circuit.
 See
 [validation coverage](docs/validation_coverage.md) and the
 [implementation plan](docs/design/implementation_plan.md).
@@ -68,7 +69,7 @@ uv run benchpress-compare run --results-root /benchmarks/results/change-001
 
 `run` with all four paths prepares and collects in one invocation. `prepare`
 stops at final plan publication when admission, pilot, and freeze gates pass.
-Every required validation certificate must pass before a normal full-corpus freeze;
+Target legality must pass before a normal full-corpus freeze;
 diagnostic preparation artifacts remain available for failures. `--accept-unresolved` records
 an explicit conditional cohort decision, but does not make unsupported validation
 pass or create missing families. A smoke subset selected by repeated
@@ -164,7 +165,7 @@ and `130` interruption. Submission success does not imply completed measurements
 ## Acceptance evidence
 
 The test suite covers deterministic seeds, conditional catalogue allocations,
-metric dependencies and dynamic branches, conservative validation, source/store
+metric dependencies and dynamic branches, recursive target legality, source/store
 integrity, scheduler recovery, and exact scoring/report edge cases. The full
 conditional catalogue reproduces all 138 planning case fractions, including the
 7.5% allocation to `vqe_uccsd_n28`; those are planning weights, not admission data.
@@ -174,11 +175,12 @@ Recorded checks against Qiskit 2.5.2 and the pinned Benchpress revision include:
 - [Inventory audit](data/inventory_audit.json): all 149 candidate assets loaded,
   round-tripped through the typed logical format, and matched their declared and
   active widths. This checks representation and asset integrity, not admission.
-- [Dynamic validation spike](data/validation_feasibility.json): `cc_n12`,
+- [Historical dynamic validation spike](data/validation_feasibility.json): `cc_n12`,
   `qec9xz_n17`, and `seca_n11` compiled on the square target at L2 with verified
   native metrics, target/layout checks, and routing replay. Their required
-  end-to-end semantic checks were unsupported in that recorded spike, so those
-  observations remain invalid and are not acceptance evidence for the current protocol.
+  end-to-end semantic checks were unsupported under that earlier contract.
+  These historical observations are not acceptance evidence or reusable results
+  for the current protocol.
 - [Worker integration tests](tests/test_worker.py): bounded real A/A observations
   execute both arms independently, preserve committed work on resume, and reuse
   only baseline observations in a subsequent run.
@@ -186,8 +188,7 @@ Recorded checks against Qiskit 2.5.2 and the pinned Benchpress revision include:
 The adapted Summit fixture recipes retain Benchpress provenance and its
 [Apache 2.0 license](data/LICENSE-BENCHPRESS.txt), also included in the package.
 
-Outstanding gates are full-corpus verification of semantic certificates for
-large/dynamic fixtures, verification against the actual supplied source versions, real-site LSF
+Outstanding gates are verification against the actual supplied source versions, real-site LSF
 and shared-filesystem checks, full baseline admission/pilot, and a real frozen
 cohort A/A rehearsal with independent evolve observations. Test success alone is
 not evidence that those gates passed.

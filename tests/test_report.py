@@ -33,7 +33,9 @@ def fixture():
             "D2": d2,
             "validation": {
                 "status": "verified",
-                "checks": [{"scope": "exact-unitary", "status": "verified"}],
+                "checks": {
+                    "target_legality": {"status": "verified"}
+                },
             },
         }
         for arm, n2, d2 in (("baseline", 10, 10), ("evolve", 9, 11))
@@ -56,6 +58,10 @@ def test_report_deterministic_authoritative_and_csv_roundtrip(tmp_path):
     saved = json.loads(before["summary.json"])
     assert saved["crossed_metric_circuits"] == ["Q/circuit"]
     assert saved["validation_coverage"]["statuses"] == {"verified": 2}
+    assert saved["validation_coverage"]["required_checks"] == ["target_legality"]
+    assert saved["validation_coverage"]["scopes"] == {"target_legality": 2}
+    assert "semantics" not in saved["validation_coverage"]
+    assert "verified native target legality" in before["report.md"].decode()
     assert "smoke subset" in before["report.md"].decode()
     with open(paths["cases.csv"], newline="") as stream:
         rows = list(csv.DictReader(stream))
