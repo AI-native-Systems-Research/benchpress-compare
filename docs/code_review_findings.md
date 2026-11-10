@@ -1,13 +1,17 @@
 # Code review findings: `src/benchpress_compare`
 
 Review date: 2026-11-10. Scope: every module under `src/benchpress_compare`
-(39 files, ~8,600 lines), reviewed against the working tree **including the
-uncommitted changes** to `config.py`, `executors/lsf.py` and `orchestrator.py`
-(scheduler `TERM_*` classification and `memory_headroom_gb`). Nothing was
-changed; this document only records findings and suggested fixes.
+(39 files, ~8,600 lines), reviewed against the working tree that became commit
+`82be945` ("Fixed memory bug"). That commit includes the changes to `config.py`,
+`executors/lsf.py` and `orchestrator.py` that add scheduler `TERM_*`
+classification and `memory_headroom_gb`; they were still uncommitted while the
+review ran. Nothing was changed; this document only records findings and
+suggested fixes.
 
 State at review time: `pytest` passes (267 tests), `ruff check src` is clean.
-Two measurements were taken to size performance findings (see F5 and F30).
+Two measurements were taken to size performance findings (see F5 and F27). F5
+and F34 also use measurements from the live `full` run of 2026-11-10, written up
+in [controller_throughput.md](controller_throughput.md).
 
 Severity scale:
 
@@ -17,7 +21,7 @@ Severity scale:
   scale or under ordinary cluster conditions.
 - **Low**: edge cases, hygiene, documentation drift.
 
-Line numbers refer to the files as they are on disk today.
+Line numbers refer to the files as of commit `82be945`.
 
 ---
 
@@ -42,7 +46,7 @@ Line numbers refer to the files as they are on disk today.
 4. On resume the committed results are returned by `_existing`, so the run continues, but those observations are lost forever. Each new harness failure costs another controller restart.
 5. Lost baseline observations drop their inputs from the score; lost evolve observations make the main score unavailable.
 
-The uncommitted change correctly reclassifies external kills (`-9`, `-15`, `TERM_*`) as `INFRA_FAILED`, which narrows the remaining unexplained-exit path, but the abort-and-poison behaviour for real `HARNESS_FAILED` receipts is unchanged.
+Commit `82be945` correctly reclassifies external kills (`-9`, `-15`, `TERM_*`) as `INFRA_FAILED`, which narrows the remaining unexplained-exit path, but the abort-and-poison behaviour for real `HARNESS_FAILED` receipts is unchanged.
 
 **Suggested fix**
 
@@ -111,13 +115,27 @@ In `_commit`, retry the store lease with a bounded wait (seconds to a few minute
 
 **Measured**: with a representative `submitted` payload, one append costs 3.2 ms at ~100 events and 95 ms at ~1,500 events (fast local disk). The aborted full run in `results/full.aborted-20261110` has 3,251 events for 839 committed observations, so a complete full profile is on the order of 20,000 events: roughly 1.2 s per append near the end and several hours of controller CPU in total, with a ~25 MB file re-read on a shared filesystem each time. Every append holds `lease.fenced()`, so the heartbeat thread is blocked for the duration, which erodes the 120 s lease TTL margin.
 
-**Suggested fix** Keep the verified chain state in memory after the first replay (`count`, `last_hash`, `committed_bytes`) and on append only verify that the file size still equals `committed_bytes` (re-replay only if it does not). Optionally move the big `job` dicts out of the `submitted` event (they are already persisted in `attempt.json`).
+The live `full` run of 2026-11-10 on GPFS confirms this: at 10,340 events (13.5 MB, 57 % of the run) one `_read()` takes 0.46 s. Each observation causes three appends, which adds about 1.4 s of controller time per observation. Median shard launch is 4.5 s (12 appends) and median commit is 0.68 s. `fsync` is not the cost (0.4 ms per append), so durability should stay as it is. Together with F34, this is why that run's throughput fell from ~65 to ~17 observations/min.
+
+**Suggested fix** Keep the verified chain state in memory after the first replay (`count`, `last_hash`, `committed_bytes`) and on append only verify that the file size still equals `committed_bytes` (re-replay only if it does not). Optionally move the big `job` dicts out of the `submitted` event (they are already persisted in `attempt.json`). [controller_throughput.md §2.1](controller_throughput.md#21-make-journalappend-o1-by-caching-the-tail) has the step-by-step change and the tests to add.
+
+**Status** Implemented on branch `bug_fixes`: about 0.2 ms per append at 3,000 events, against 0.17 s for one full verification.
+
+### F34. The controller loop serialises dispatch and collection and counts finished jobs against `max_jobs`
+
+**Where** [orchestrator.py:494](../src/benchpress_compare/orchestrator.py#L494) (`while pending or active`): dispatch at [orchestrator.py:520-562](../src/benchpress_compare/orchestrator.py#L520-L562), a single `poll_many` at [orchestrator.py:567](../src/benchpress_compare/orchestrator.py#L567), collection until [orchestrator.py:704](../src/benchpress_compare/orchestrator.py#L704), and an unconditional sleep at [orchestrator.py:713-714](../src/benchpress_compare/orchestrator.py#L713-L714).
+
+**Problem** Each iteration first launches shards until `max_jobs` or pending work runs out, then polls once, then commits every finished attempt. Nothing is collected while it dispatches, and nothing is dispatched while it collects. The dispatch budget counts every attempt in `active`, and an attempt leaves `active` only when it is committed. As a result, a shard that finished on LSF minutes earlier still holds a slot. On the live 2026-11-10 `full` run with `max_jobs = 100`, dispatch phases lasted 6-13 minutes with no commits and commit phases 4-8 minutes with no submissions. Running shards swung between ~100 and ~3 on a 15-20 minute cycle. F5 makes every phase longer as the journal grows.
+
+**Suggested fix** Reorder each iteration to cancel check → poll → collect → raise on uncertain or harness failures → dispatch. Time-box the dispatch slice to `poll_interval`, sleep only when an iteration did no work, and optionally cap commits per iteration. Count only jobs that are still on the scheduler towards the budget. Fix F5 first: it removes most of the per-launch cost. [controller_throughput.md §2.2](controller_throughput.md#22-interleave-dispatch-with-collection-and-stop-counting-finished-jobs) lists the steps, the invariants that must survive, the tests, and how to check a real run. Any change under `src/` changes `harness_identity()`, so land it between runs ([controller_throughput.md §4](controller_throughput.md#4-rollout-notes)).
+
+**Status** Implemented on branch `bug_fixes` (steps 2.2a-e); not yet checked on a real LSF run.
 
 ### F6. Job-level scheduler limits are attributed to the running child without corroboration, and `started` is meaningless for single LSF jobs
 
 **Where** [orchestrator.py:600-606](../src/benchpress_compare/orchestrator.py#L600-L606) (`termination`, `limit`, `started`) and [orchestrator.py:657-658](../src/benchpress_compare/orchestrator.py#L657-L658) (`elif limit and started: RESOURCE_LIMIT`), [orchestrator.py:666-669](../src/benchpress_compare/orchestrator.py#L666-L669) (`not started`), [executors/lsf.py:141](../src/benchpress_compare/executors/lsf.py#L141) (`job.json` written before `bsub`).
 
-**Problem** (uncommitted code)
+**Problem** (code added in `82be945`)
 
 - A shard's `-W` is the *sum* of its children's watchdogs (plus 11 %), so `TERM_RUNLIMIT` on a shard says the shard was slow overall, not that the child running at that moment exceeded its own `wall_seconds`. That child is nonetheless committed as a terminal `RESOURCE_LIMIT` (`wall_limit`): a baseline child is dropped from the score, an evolve child blocks the main score. The same applies to `TERM_MEMLIMIT` when the cgroup charge includes the supervisor and page cache.
 - For non-shard LSF jobs (`build`, `freeze-targets`, `validate-import`), `started` is `True` whenever `job.json` exists, and `LSFExecutor.submit` writes it before calling `bsub`, so `job_ended_before_start` can never fire and a job killed while still `PEND` is classified from `termination` alone.
@@ -128,7 +146,7 @@ In `_commit`, retry the store lease with a bounded wait (seconds to a few minute
 
 **Where** [executors/local.py:63-72](../src/benchpress_compare/executors/local.py#L63-L72). `os.getpgid(child.pid)` raises `ProcessLookupError` (an `OSError`) when a child exits between `children(recursive=True)` and the call; the handler catches only `psutil.NoSuchProcess`, which is not related to `ProcessLookupError` (verified: `issubclass(psutil.NoSuchProcess, ProcessLookupError)` is `False`).
 
-**Problem** Short-lived descendants are common (hundreds of `rustc` processes during a build task, polled every 0.1 s locally and 10×/s inside shards). The exception escapes `poll()`: inside a shard it kills the supervisor (remaining members become infrastructure casualties, F1 before the uncommitted change), locally it ends the orchestrator loop with exit code 2 and `status.json` stuck at `RUNNING`.
+**Problem** Short-lived descendants are common (hundreds of `rustc` processes during a build task, polled every 0.1 s locally and 10×/s inside shards). The exception escapes `poll()`: inside a shard it kills the supervisor (remaining members become infrastructure casualties; before `82be945` they were caught by F1), locally it ends the orchestrator loop with exit code 2 and `status.json` stuck at `RUNNING`.
 
 **Suggested fix** Catch `(psutil.NoSuchProcess, ProcessLookupError)` around the per-child block, and in `_group_exists` ([local.py:78-85](../src/benchpress_compare/executors/local.py#L78-L85)) treat `PermissionError` as "group exists".
 
@@ -166,7 +184,7 @@ In `_commit`, retry the store lease with a bounded wait (seconds to a few minute
 
 ### F12. LSF single jobs run with the submitting shell's environment
 
-**Where** [executors/lsf.py:115-196](../src/benchpress_compare/executors/lsf.py#L115-L196) passes no environment to `bsub`; [worker/__init__.py:49-55](../src/benchpress_compare/worker/__init__.py#L49-L55) sets `PYTHONNOUSERSITE` and pops `PYTHONPATH` only after the interpreter has already built `sys.path`.
+**Where** `LSFExecutor.submit` ([executors/lsf.py:127-196](../src/benchpress_compare/executors/lsf.py#L127-L196)) passes no environment to `bsub`; [worker/__init__.py:49-55](../src/benchpress_compare/worker/__init__.py#L49-L55) sets `PYTHONNOUSERSITE` and pops `PYTHONPATH` only after the interpreter has already built `sys.path`.
 
 **Problem** Only shard children get the sanitised `worker_environment`. The controller, `resolve-dependencies`, `build`, `freeze-targets` and `validate-import` jobs inherit `PYTHONPATH`, user site-packages, `~/.qiskit/settings.conf`, proxies and so on from the launching shell. A developer's `PYTHONPATH=src` would make these jobs import the live coordinator source instead of the pinned harness wheel. The runtime attestation catches a *different dependency inventory* but not a same-version import from another path.
 
@@ -276,4 +294,4 @@ Any failed task reaches [orchestrator.py:711-712](../src/benchpress_compare/orch
 - Lease fencing, journal hash chain, atomic bundle publication and verification (`store.py`, `journal.py`, `identity.py`).
 - Target snapshot sealing and import/export round trip (`targets.py`); typed IR round trip (`corpus/ir.py`); recursive target legality (`validation/`).
 - Build attestation, environment manifests and workspace cleanup (`builds/release.py`); deterministic source snapshots (`builds/snapshot.py`).
-- The uncommitted scheduler-termination classification is an improvement over the previous behaviour; F6 lists what it still leaves open.
+- The scheduler-termination classification added in `82be945` is an improvement over the previous behaviour; F6 lists what it still leaves open.

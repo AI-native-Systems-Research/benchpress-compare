@@ -30,8 +30,48 @@ def test_committed_corruption_is_rejected(tmp_path):
     journal.path.write_text(journal.path.read_text().replace('"value":1', '"value":9'))
     with pytest.raises(IntegrityError, match="committed journal"):
         journal.replay()
+    # The appending instance trusts its cached tail while the file signature is
+    # unchanged; a same-size in-place edit is caught by replay and by any new
+    # instance, which is what a restarted controller is.
     with pytest.raises(IntegrityError):
-        journal.append("ANOTHER")
+        Journal(journal.path).append("ANOTHER")
+
+
+def test_append_verifies_the_chain_once_per_instance(tmp_path, monkeypatch):
+    journal = Journal(tmp_path / "events.jsonl")
+    calls = []
+    read = Journal._read
+    monkeypatch.setattr(Journal, "_read", lambda self: calls.append(1) or read(self))
+    for index in range(200):
+        journal.append("EVENT", index=index)
+    assert len(calls) == 1
+    monkeypatch.undo()
+    events = journal.replay()
+    assert [event["sequence"] for event in events] == list(range(200))
+    assert all(b["previous"] == a["event_hash"] for a, b in zip(events, events[1:]))
+
+
+def test_cached_tail_is_invalidated_by_another_writer(tmp_path):
+    first = Journal(tmp_path / "events.jsonl")
+    second = Journal(tmp_path / "events.jsonl")
+    first.append("A")
+    second.append("B")
+    third = first.append("C")
+    events = first.replay()
+    assert [event["event_type"] for event in events] == ["A", "B", "C"]
+    assert third["sequence"] == 2
+    assert third["previous"] == events[1]["event_hash"]
+
+
+def test_cached_tail_is_invalidated_by_a_torn_tail(tmp_path):
+    journal = Journal(tmp_path / "events.jsonl")
+    first = journal.append("START")
+    with journal.path.open("ab") as stream:
+        stream.write(b'{"unfinished":')
+    second = journal.append("NEXT")
+    assert second["sequence"] == 1
+    assert second["previous"] == first["event_hash"]
+    assert journal.replay() == [first, second]
 
 
 def test_valid_but_unterminated_tail_is_not_committed(tmp_path):
