@@ -9,8 +9,8 @@ from .identity import canonical_hash, observation_identity
 from .schema import PROTOCOLS
 
 # Measured on the 2026-11-10 baseline screening (worst seed, one level).
-# Each seed of each case of these inputs runs in its own LSF job, so no slow
-# compile waits behind another in a sequential shard.
+# Every observation of these inputs (one case, seed and arm) runs in its own
+# LSF job, so no slow compile waits behind another in a sequential shard.
 BIG_CIRCUITS = {
     "Q/large/bwt_n37": {"observed_seconds": 1500, "observed_peak_gb": 9},
     "Q/large/square_root_n60": {"observed_seconds": 1470, "observed_peak_gb": 8},
@@ -60,18 +60,17 @@ def observations_for(cases, builds, *, phase="comparison", profiles=None):
 def shard_bundles(specs, *, max_observations, job_wall_seconds, overhead_seconds=10):
     """Group observations into LSF jobs without runtime estimates.
 
-    Each (case, seed) of a ``BIG_CIRCUITS`` input gets its own job holding
-    both arms, so the paired observations share a node. Every other observation
-    is packed in plan order, at most ``max_observations`` per job and no more
-    than the job wall limit can hold at the frozen watchdog.
+    Every observation of a ``BIG_CIRCUITS`` input gets its own job, so
+    baseline and evolve run separately. Every other observation is packed in
+    plan order, at most ``max_observations`` per job and no more than the job
+    wall limit can hold at the frozen watchdog.
     """
-    big, small = defaultdict(list), defaultdict(list)
+    groups, small = [], defaultdict(list)
     for spec in specs:
         if spec["input_id"] in BIG_CIRCUITS:
-            big[spec["case_id"], spec["seed"]].append(spec)
+            groups.append([spec])
         else:
             small[canonical_hash(spec["runtime_profile"])].append(spec)
-    groups = [big[key] for key in sorted(big)]
     for profile in sorted(small):
         rows = small[profile]
         wall = rows[0]["runtime_profile"]["wall_seconds"]
@@ -79,9 +78,6 @@ def shard_bundles(specs, *, max_observations, job_wall_seconds, overhead_seconds
         groups.extend(rows[offset : offset + size] for offset in range(0, len(rows), size))
     bundles = []
     for rows in groups:
-        profile = canonical_hash(rows[0]["runtime_profile"])
-        if any(canonical_hash(row["runtime_profile"]) != profile for row in rows):
-            raise PreparationError("A job must not mix observation resource profiles")
         job = {
             "observations": rows,
             # Worst case: every observation runs to its frozen watchdog.

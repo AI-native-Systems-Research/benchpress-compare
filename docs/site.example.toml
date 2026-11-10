@@ -14,8 +14,9 @@ poll_seconds = 10
 visibility_grace_seconds = 300
 job_wall_seconds = 86400
 # Fixture and comparison jobs hold at most this many sequential observations
-# (also bounded by job_wall_seconds). Big circuits always get one job per seed.
-shard_max_observations = 24
+# (also bounded by job_wall_seconds); six is one case, three seeds on both arms.
+# Every observation of a big circuit always gets a job of its own.
+shard_max_observations = 6
 
 # Confirm both -M and rusage[mem=...] behavior against the site's LSF policy:
 # check LSF_UNIT_FOR_LIMITS in lsf.conf. Supported configured units are KB, MB

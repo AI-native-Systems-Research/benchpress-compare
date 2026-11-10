@@ -155,7 +155,7 @@ def test_freeze_plans_every_input_on_both_arms_without_measuring_anything(
     assert (Path(cfg.results_root) / "plan.json").read_bytes() == before
 
 
-def test_lsf_plan_gives_each_big_case_seed_its_own_job(tmp_path, fake_preparation, monkeypatch):
+def test_lsf_plan_gives_each_big_observation_its_own_job(tmp_path, fake_preparation, monkeypatch):
     import benchpress_compare.preparation as module
 
     catalogue = module.load_catalogue()
@@ -166,10 +166,8 @@ def test_lsf_plan_gives_each_big_case_seed_its_own_job(tmp_path, fake_preparatio
     big = [
         bundle for bundle in plan["bundles"] if bundle["observations"][0]["input_id"] in BIG_CIRCUITS
     ]
-    assert len(big) == 6 * 3
-    for bundle in big:
-        rows = bundle["observations"]
-        assert len({(row["case_id"], row["seed"]) for row in rows}) == 1 and len(rows) == 2
+    assert len(big) == 6 * 3 * 2
+    assert all(len(bundle["observations"]) == 1 for bundle in big)
     assert sum(len(bundle["observations"]) for bundle in plan["bundles"]) == 288
     assert plan["expected_counts"]["jobs"] == len(plan["bundles"])
 

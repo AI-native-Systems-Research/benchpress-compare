@@ -145,10 +145,11 @@ claim or a regression pass/fail threshold.
 Copy [site.example.toml](docs/site.example.toml), set the queue and site memory
 semantics (`LSF_UNIT_FOR_LIMITS` decides whether `-M`/`rusage[mem=]` are MB or
 GB), and keep the package, sources/snapshots, store, and results on storage
-visible to workers. Each seed of each case of the inputs in `BIG_CIRCUITS`
-(`planner.py`) runs as its own job with both arms; all other observations and
-fixture tasks are sharded in plan order into sequential jobs of at most
-`shard_max_observations`. The
+visible to workers. Every observation of the inputs in `BIG_CIRCUITS`
+(`planner.py`) runs as its own job, baseline and evolve separately; all other
+observations and fixture tasks are sharded in plan order into sequential jobs of
+at most `shard_max_observations` (default 6: one case, three seeds on both
+arms). The
 controller polls its jobs with one `bjobs` listing per cycle and falls back to
 `bhist -l` text history, matched by unique job name. Use an execution-platform coordinator environment; a macOS
 wheel cannot run on Linux workers.

@@ -128,9 +128,10 @@ class SiteConfig:
     visibility_grace_seconds: float = 300
     job_wall_seconds: int = 86400
     # Fixture and comparison shards hold at most this many sequential
-    # observations, also bounded by the job wall limit. Each seed of each case
-    # of a big circuit (planner.BIG_CIRCUITS) always gets a job of its own.
-    shard_max_observations: int = 24
+    # observations, also bounded by the job wall limit. Six is one case: three
+    # seeds on both arms. Every observation of a big circuit
+    # (planner.BIG_CIRCUITS) always gets a job of its own.
+    shard_max_observations: int = 6
     memory_unit: str = "MB"
     memory_limit_unit: str | None = None
     memory_reservation_unit: str | None = None
