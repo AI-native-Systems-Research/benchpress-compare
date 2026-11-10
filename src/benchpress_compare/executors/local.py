@@ -223,6 +223,9 @@ class LocalExecutor:
             job.update(status="RESOURCE_LIMIT", reason=reason)
         return job
 
+    def poll_many(self, jobs):
+        return {token: self.poll(job) for token, job in jobs.items()}
+
     def cancel(self, job):
         terminate_group(job)
         return {**job, "status": "CANCELLED"}

@@ -1,10 +1,25 @@
 # Validation coverage and remaining delivery gates
 
 This file describes implemented capabilities, not a claim that the complete
-native corpus has passed admission. Required checks have four outcomes:
-`verified`, `mismatch`, `unsupported`, or `error`. Only `verified` satisfies a
-required gate. Compilation success, target legality, and routing replay alone
-do not prove whole-circuit semantic equivalence.
+native corpus has passed admission. Checks have four outcomes: `verified`,
+`mismatch`, `unsupported`, or `error`. Only `verified` satisfies a required gate.
+Compilation success, target legality, and routing replay alone do not prove
+whole-circuit semantic equivalence.
+
+## Frozen contract (`legality-routing-bounded-semantics-v2`)
+
+Every accepted observation requires three `verified` certificates: recursive
+native target legality (directed qubits, parameters, conditions, reset and
+measurement support), injective in-range initial/final layouts, and exact
+routing replay at every executed SABRE boundary (or an acknowledged bypass).
+The semantic check is a **disclosed** check: the exact bounded oracles below run
+on every observation and their outcome is recorded beside the scores. A
+`mismatch` or `error` from the oracle invalidates the observation. An
+`unsupported` result (the circuit exceeds the oracle's exact bounds) is coverage
+information, not success: such observations are certified by legality, layout and
+routing replay only, and reports state how many observations fall in each class.
+This contract is what makes a full native-corpus run possible; it must not be
+read as verified end-to-end equivalence for circuits beyond the oracle bounds.
 
 | Check | Implemented scope | Limit |
 | --- | --- | --- |
@@ -27,11 +42,14 @@ implemented. They must not be admitted merely because compilation succeeds.
 The catalogue's native inputs start at eight qubits. A static eight-qubit input
 may fit the isometry oracle when its physical footprint also fits; most native
 inputs exceed the bounds. The bounded validators do **not** establish complete
-semantic validation for the requested native-corpus comparison. Current normal preparation must stop at unresolved
-eligibility when it cannot obtain required evidence. An explicit
-`--accept-unresolved` decision can record excluded candidates and a conditional
-cohort; it cannot mark unsupported checks verified or repair an empty-family
-freeze gate.
+semantic validation for the requested native-corpus comparison; under the frozen
+contract they are disclosed coverage, and the required gate is legality, layout
+and exact routing replay. Normal preparation still stops at unresolved
+eligibility when a required certificate or compilation evidence is missing. An
+explicit `--accept-unresolved` decision can record excluded candidates and a
+conditional cohort; it cannot mark unsupported checks verified or repair an
+empty-family freeze gate. An empty family needs the explicitly named reduced
+design (`--allow-missing-families`), never silent reweighting.
 
 ## Remaining acceptance work
 

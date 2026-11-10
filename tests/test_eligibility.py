@@ -58,8 +58,22 @@ def test_summary_label_does_not_substitute_for_required_validation_evidence():
     observations = records()
     observations[0]["validation"] = {"status": "verified"}
     assert evaluate_configuration(observations)["status"] == "unresolved"
+    # The bounded semantic oracle is disclosed coverage: beyond its bounds it
+    # neither qualifies nor disqualifies, while a conclusive negative always does.
     observations = records()
     observations[0]["validation"]["checks"]["semantics"] = {
+        "status": "unsupported",
+        "required": False,
+    }
+    assert evaluate_configuration(observations)["status"] == "qualifying"
+    observations = records()
+    observations[0]["validation"]["checks"]["semantics"] = {
+        "status": "mismatch",
+        "required": False,
+    }
+    assert evaluate_configuration(observations)["status"] == "unresolved"
+    observations = records()
+    observations[0]["validation"]["checks"]["routing"] = {
         "status": "unsupported",
         "required": False,
     }

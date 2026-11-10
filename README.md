@@ -8,12 +8,12 @@ Qiskit; each measurement uses the selected build's isolated worker environment.
 
 **Implementation status:** this repository contains the package, local and LSF
 execution adapters, durable storage, scientific calculations, reports, and tests.
-It has **not completed the design's full-corpus acceptance gates**. In particular,
-the semantic validator is bounded to small circuits. Larger circuits return
-`unsupported: semantic_certificate_required`; this blocks normal admission and
-cannot be treated as verified equivalence. Real source-build A/A collection,
-shared-cluster filesystem validation, real LSF smoke collection, and a full
-149-candidate rehearsal remain acceptance work. See
+The frozen validation contract requires verified native legality, layout
+validity and exact routing replay for every accepted observation. The exact
+semantic oracle is bounded to small circuits and is **disclosed coverage**:
+larger circuits record `unsupported: semantic_certificate_required` beside their
+scores, which is not verified equivalence, while a semantic `mismatch` or `error`
+still invalidates the observation. See
 [validation coverage](docs/validation_coverage.md) and the
 [implementation plan](docs/design/implementation_plan.md).
 
@@ -76,7 +76,10 @@ pass or create missing families. A smoke subset selected by repeated
 eight-family score.
 
 Use `--native-threads`, `--cpu-budget`, `--memory-gb`, `--worker-memory-gb`,
-`--wall-seconds`, and `--workers` to set local budgets. Both arms use the same
+`--wall-seconds`, `--build-cpus`, and `--workers` to set local budgets. If a
+family has no admitted input, the standard eight-family design cannot freeze;
+`--allow-missing-families` selects the explicitly named reduced design instead
+of redistributing weight. Both arms use the same
 frozen observation profile. A zero-capacity allocation is an error. Successful
 baseline evidence can be reused only when build, input, target, seed, phase,
 protocols, and runtime identities agree.
@@ -123,8 +126,12 @@ claim or a regression pass/fail threshold.
 ## LSF
 
 Copy [site.example.toml](docs/site.example.toml), set the queue and site memory
-semantics, and keep the package, sources/snapshots, store, and results on storage
-visible to workers. Use an execution-platform coordinator environment; a macOS
+semantics (`LSF_UNIT_FOR_LIMITS` decides whether `-M`/`rusage[mem=]` are MB or
+GB), and keep the package, sources/snapshots, store, and results on storage
+visible to workers. Preparation tasks and preflight observations are sharded
+into sequential jobs; comparison jobs are packed to `target_job_seconds`. The
+controller polls its jobs with one `bjobs` listing per cycle and falls back to
+`bhist -l` text history, matched by unique job name. Use an execution-platform coordinator environment; a macOS
 wheel cannot run on Linux workers.
 
 ```bash

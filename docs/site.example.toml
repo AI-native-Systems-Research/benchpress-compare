@@ -13,9 +13,15 @@ max_memory_gb = 128
 poll_seconds = 10
 visibility_grace_seconds = 300
 job_wall_seconds = 86400
+# Comparison jobs are packed to about this many seconds of estimated work so a
+# run spreads across many jobs; preparation shards hold at most this many
+# sequential observations (also bounded by job_wall_seconds).
+target_job_seconds = 7200
+shard_max_observations = 24
 
-# Confirm both -M and rusage[mem=...] behavior against the site's LSF policy.
-# Supported configured units are KB, MB and GB.
+# Confirm both -M and rusage[mem=...] behavior against the site's LSF policy:
+# check LSF_UNIT_FOR_LIMITS in lsf.conf. Supported configured units are KB, MB
+# and GB. A wrong unit requests thousands of times too much or too little memory.
 memory_unit = "MB"
 # Override separately on sites where hard limits and reservations differ.
 # memory_limit_unit = "KB"

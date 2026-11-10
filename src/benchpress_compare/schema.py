@@ -12,7 +12,7 @@ PROTOCOLS = {
     "worker": "observation-worker-v1",
     "instrumentation": "sabre-native-call-v1",
     "metric": "native-n2-weighted-d2-v1",
-    "validation": "legality-routing-instrument-v1",
+    "validation": "legality-routing-bounded-semantics-v2",
     "target": "directed-target-v1",
     "fixture": "bound-logical-ir-v1",
     "identity": "canonical-json-v1",

@@ -8,7 +8,50 @@ from copy import deepcopy
 from benchpress_compare.metrics import validate_circuit
 from benchpress_compare.targets import validate_target
 
-VALIDATION_PROTOCOL = "legality-routing-instrument-v1"
+VALIDATION_PROTOCOL = "legality-routing-bounded-semantics-v2"
+# Required certificates: recursive native legality, injective layouts and exact
+# routing replay at every executed SABRE boundary. The bounded semantic oracle is
+# disclosed coverage: exact where tractable, otherwise "unsupported" is recorded
+# beside the scores and never presented as verified equivalence.
+REQUIRED_CHECKS = ("target_legality", "layout", "routing")
+DISCLOSED_CHECKS = ("semantics",)
+
+
+def summarize_validation(checks: dict) -> dict:
+    """Combine check evidence under the frozen contract.
+
+    Every required check must be ``verified``. A disclosed check is required only
+    when it reached a conclusion: ``verified`` is recorded, ``mismatch``/``error``
+    invalidates the observation, and ``unsupported`` (beyond the exact oracle's
+    bounds) is coverage information rather than success or failure.
+    """
+    combined = {}
+    statuses = set()
+    for name, check in checks.items():
+        if not isinstance(check, dict) or check.get("status") not in {
+            "verified",
+            "mismatch",
+            "unsupported",
+            "error",
+        }:
+            raise ValueError(f"Malformed validation check: {name}")
+        record = dict(check)
+        record["required"] = name in REQUIRED_CHECKS or record["status"] != "unsupported"
+        if record["required"]:
+            statuses.add(record["status"])
+        combined[name] = record
+    if any(name not in combined for name in REQUIRED_CHECKS):
+        statuses.add("error")
+    status = next((s for s in ("error", "mismatch", "unsupported") if s in statuses), "verified")
+    return {
+        "schema_version": 1,
+        "protocol": VALIDATION_PROTOCOL,
+        "status": status,
+        "required_checks": list(REQUIRED_CHECKS),
+        "disclosed_checks": list(DISCLOSED_CHECKS),
+        "semantic_coverage": combined.get("semantics", {}).get("status", "missing"),
+        "checks": combined,
+    }
 
 
 def target_legality(circuit: dict, target: dict) -> dict:

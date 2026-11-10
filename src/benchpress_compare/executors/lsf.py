@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict
 import json
 import math
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -16,10 +17,15 @@ from ..identity import atomic_write_json
 
 ACTIVE = {"PEND", "RUN", "PSUSP", "USUSP", "SSUSP", "WAIT", "PROV"}
 TERMINAL = {"DONE", "EXIT", "ZOMBI"}
+_NOT_FOUND = re.compile(r"not found|no matching job|no unfinished job", re.IGNORECASE)
 
 
 def parse_jobs(output: str) -> list[dict]:
-    """Parse requested jobid/stat/job_name output, never infer absence on errors."""
+    """Parse requested jobid/stat/job_name output, never infer absence on errors.
+
+    A per-record ``not found`` error is an explicit statement that the scheduler
+    does not list that job; it is returned as absence, unlike any other error.
+    """
     text = output.strip()
     if not text:
         return []
@@ -33,6 +39,10 @@ def parse_jobs(output: str) -> list[dict]:
         normalized = []
         for row in rows:
             row = {key.lower(): value for key, value in row.items()}
+            if "error" in row and "stat" not in row:
+                if _NOT_FOUND.search(str(row["error"])):
+                    continue
+                raise ValueError(f"Scheduler record error: {row['error']}")
             job_id, state = row.get("jobid", row.get("job_id")), row.get("stat", row.get("status"))
             if job_id is None or state not in ACTIVE | TERMINAL | {"UNKWN"}:
                 raise ValueError("Missing or unknown scheduler identity/state")
@@ -46,6 +56,8 @@ def parse_jobs(output: str) -> list[dict]:
         return normalized
     rows = []
     for line in text.splitlines():
+        if _NOT_FOUND.search(line):
+            continue
         fields = line.split(None, 2)
         if fields and fields[0].upper() in {"JOBID", "JOB_ID"}:
             continue
@@ -59,13 +71,46 @@ def parse_jobs(output: str) -> list[dict]:
     return rows
 
 
+def parse_history(output: str) -> list[dict]:
+    """Parse ``bhist -l`` records; ``-o`` is unavailable on many LSF 10.1 sites.
+
+    Wrapped continuation lines are rejoined before matching. Identifiers can be
+    reused by the scheduler, so callers must match the unique job name as well.
+    """
+    text = re.sub(r"\n\s{10,}", "", output or "")
+    rows = []
+    for block in re.split(r"\n(?=Job <\d+>,)", "\n" + text):
+        header = re.match(r"\s*Job <(\d+)>,(.*)", block)
+        if not header:
+            continue
+        name = re.search(r"Job Name <([^>]*)>", header.group(2))
+        if "Done successfully" in block:
+            state = "DONE"
+        elif re.search(r"Exited|Completed <exit>", block):
+            state = "EXIT"
+        elif re.search(r"Dispatched|Starting \(Pid|Running with execution home", block):
+            state = "RUN"
+        elif "Submitted from host" in block:
+            state = "PEND"
+        else:
+            state = "UNKWN"
+        rows.append(
+            {
+                "job_id": header.group(1),
+                "scheduler_state": state,
+                "name": name.group(1) if name else "",
+            }
+        )
+    return rows
+
+
 class LSFExecutor:
     def __init__(self, site: SiteConfig, runner=subprocess.run):
         self.site = site
         self.runner = runner
 
-    def _command(self, arguments):
-        return self.runner(arguments, capture_output=True, text=True, check=False, timeout=60)
+    def _command(self, arguments, *, timeout=60):
+        return self.runner(arguments, capture_output=True, text=True, check=False, timeout=timeout)
 
     def submit(self, command, attempt_dir, profile, *, name, token):
         attempt_dir = Path(attempt_dir).resolve()
@@ -136,59 +181,108 @@ class LSFExecutor:
 
     def query(self, *, name=None, job_id=None, history=False):
         if history:
-            argv = [self.site.bhist, "-n", "0", "-a", "-o", "jobid stat job_name"]
+            # bhist -l is the portable history form; the unique job name is the
+            # reliable key because the scheduler recycles numeric identifiers.
+            argv = [self.site.bhist, "-l", "-a"]
+            if name:
+                argv.extend(["-J", name])
+            elif job_id:
+                argv.append(str(job_id))
+            timeout = 300
         else:
             argv = [self.site.bjobs, "-a", "-o", "jobid stat job_name"]
-        if self.site.machine_readable:
-            argv.append("-json")
-        else:
-            argv.append("-noheader")
-        if job_id:
-            argv.append(str(job_id))
-        elif name:
-            argv.extend(["-J", name])
+            if self.site.machine_readable:
+                argv.append("-json")
+            else:
+                argv.append("-noheader")
+            if job_id:
+                argv.append(str(job_id))
+            elif name:
+                argv.extend(["-J", name])
+            timeout = 120
         try:
-            result = self._command(argv)
+            result = self._command(argv, timeout=timeout)
             if result.returncode:
+                if _NOT_FOUND.search(result.stdout + result.stderr):
+                    return []
                 raise ReconciliationError(f"Scheduler query failed: {result.stderr.strip()}")
-            return parse_jobs(result.stdout)
+            return parse_history(result.stdout) if history else parse_jobs(result.stdout)
         except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
             raise ReconciliationError(f"Scheduler query unavailable: {exc}") from exc
+
+    @staticmethod
+    def _matches(job, rows):
+        return [
+            row
+            for row in rows
+            if row["name"] == job["name"]
+            and (not job.get("job_id") or row["job_id"] == job["job_id"])
+        ]
+
+    def _apply(self, job, row):
+        job = dict(job)
+        state = row["scheduler_state"]
+        job.update(row)
+        if state in ACTIVE:
+            job["status"] = "RUNNING" if state == "RUN" else "QUEUED"
+            job.pop("uncertain_since", None)
+        elif state in {"DONE", "EXIT"}:
+            job["status"] = state
+            job.pop("uncertain_since", None)
+        else:
+            job["status"] = "SUBMISSION_UNKNOWN"
+        return job
+
+    def _uncertain(self, job):
+        job.setdefault("uncertain_since", time.time())
+        if time.time() - job["uncertain_since"] >= self.site.visibility_grace_seconds:
+            job["status"] = "NEEDS_RECONCILIATION"
+        return job
 
     def poll(self, job):
         job = dict(job)
         try:
             rows = self.query(name=job["name"], job_id=job.get("job_id"))
-            if not rows:
-                rows = self.query(name=job["name"], job_id=job.get("job_id"), history=True)
-            matches = [
-                row
-                for row in rows
-                if row["name"] == job["name"]
-                and (not job.get("job_id") or row["job_id"] == job["job_id"])
-            ]
+            matches = self._matches(job, rows)
+            if not matches:
+                matches = self._matches(job, self.query(name=job["name"], history=True))
             if len(matches) > 1:
                 raise ReconciliationError(f"Conflicting duplicate scheduler jobs: {job['name']}")
             if matches:
-                state = matches[0]["scheduler_state"]
-                job.update(matches[0])
-                if state in ACTIVE:
-                    job["status"] = "RUNNING" if state == "RUN" else "QUEUED"
-                    job.pop("uncertain_since", None)
-                elif state in {"DONE", "EXIT"}:
-                    job["status"] = state
-                    job.pop("uncertain_since", None)
-                else:
-                    job["status"] = "SUBMISSION_UNKNOWN"
+                job = self._apply(job, matches[0])
             else:
                 job["status"] = "SUBMISSION_UNKNOWN"
         except ReconciliationError as exc:
             job.update(status="SUBMISSION_UNKNOWN", reason=str(exc))
         if job["status"] == "SUBMISSION_UNKNOWN":
-            job.setdefault("uncertain_since", time.time())
-            if time.time() - job["uncertain_since"] >= self.site.visibility_grace_seconds:
-                job["status"] = "NEEDS_RECONCILIATION"
+            job = self._uncertain(job)
         return job
+
+    def poll_many(self, jobs):
+        """Poll owned jobs with one listing per cycle, then individual fallbacks.
+
+        Names share a per-run prefix, so a single wildcard query covers the active
+        set; a job absent from that listing is reconciled individually rather than
+        assumed finished.
+        """
+        jobs = {token: dict(job) for token, job in jobs.items()}
+        names = [job.get("name", "") for job in jobs.values()]
+        prefix = os.path.commonprefix(names) if names else ""
+        listing = None
+        if len(jobs) > 1 and len(prefix) >= 8 and all(names):
+            try:
+                listing = self.query(name=prefix + "*")
+            except ReconciliationError:
+                listing = None
+        results = {}
+        for token, job in jobs.items():
+            if listing is not None:
+                matches = self._matches(job, listing)
+                if len(matches) == 1 and matches[0]["scheduler_state"] in ACTIVE | {"DONE", "EXIT"}:
+                    results[token] = self._apply(job, matches[0])
+                    continue
+            results[token] = self.poll(job)
+        return results
 
     def cancel(self, job):
         if not job.get("job_id"):

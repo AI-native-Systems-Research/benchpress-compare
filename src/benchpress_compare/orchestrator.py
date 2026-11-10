@@ -26,14 +26,14 @@ def work_key(spec):
     return f"{spec.get('arm', 'task')}-{spec['observation_id']}"
 
 
-def read_results(root, *, phase="comparison"):
+def read_results(root, *, phase="comparison", check_artifacts=True):
     results = []
     folder = Path(root) / ("observations" if phase == "comparison" else f"{phase}/observations")
     if folder.exists():
         for path in sorted(folder.iterdir()):
             if not path.is_dir() or path.name.startswith("."):
                 continue
-            bundle = verify_bundle(path)
+            bundle = verify_bundle(path, check_artifacts=check_artifacts)
             if bundle is not None:
                 results.append(bundle["record"])
     return results
@@ -422,20 +422,24 @@ class ExecutionEngine:
         bundle_by_key = {}
         if self.site is not None:
             if bundles is None:
-                # Preparation uses the same protocol. Pair/group only cases
-                # that fit conservatively; build and fixture tasks stay separate.
+                # Preparation uses the same protocol. Observations and fixture
+                # tasks sharing a resource profile are sharded sequentially so
+                # that the worst-case sum of their frozen watchdogs fits one job;
+                # build, target and import tasks stay separate.
                 grouped = {}
                 for spec in specs:
-                    if spec.get("task", "observation") == "observation":
-                        key = (spec["case_id"], canonical_hash(spec["runtime_profile"]))
+                    task = spec.get("task", "observation")
+                    if task in {"observation", "freeze-fixture"}:
+                        key = (task, canonical_hash(spec["runtime_profile"]))
                         grouped.setdefault(key, []).append(spec)
                 bundles = []
                 for rows in grouped.values():
+                    wall = rows[0]["runtime_profile"]["wall_seconds"]
                     size = max(
                         1,
-                        int(
-                            (self.site.job_wall_seconds - 10)
-                            // rows[0]["runtime_profile"]["wall_seconds"]
+                        min(
+                            self.site.shard_max_observations,
+                            int((self.site.job_wall_seconds - 10) // wall),
                         ),
                     )
                     for offset in range(0, len(rows), size):
@@ -443,8 +447,7 @@ class ExecutionEngine:
                         bundles.append(
                             {
                                 "observations": part,
-                                "estimated_seconds": 10
-                                + sum(row["runtime_profile"]["wall_seconds"] for row in part),
+                                "estimated_seconds": 10 + wall * len(part),
                             }
                         )
             expected = {work_key(spec): spec for spec in specs}
@@ -557,12 +560,13 @@ class ExecutionEngine:
                         used_cpu += profile["native_threads"]
                         used_memory += profile["memory_bytes"]
                 uncertain = []
-                polled_jobs = {}
                 harness_failures = []
+                owned = {}
+                for spec, attempt in active.values():
+                    owned.setdefault(attempt["job"]["token"], attempt["job"])
+                polled_jobs = self.executor.poll_many(owned) if owned else {}
                 for key, (spec, attempt) in list(active.items()):
                     token = attempt["job"]["token"]
-                    if token not in polled_jobs:
-                        polled_jobs[token] = self.executor.poll(attempt["job"])
                     job = dict(polled_jobs[token])
                     attempt.update(job=job, status=job["status"])
                     self._save_attempt(attempt)
@@ -724,7 +728,8 @@ def status(root):
     state = read_json(path) if path.exists() else {"schema_version": 1, "status": "NEW"}
     if (root / "plan.json").exists():
         plan = verify_plan(root, check_harness=False)
-        results = read_results(root)
+        # Status is a progress view; reports re-verify every artifact checksum.
+        results = read_results(root, check_artifacts=False)
         state = {
             **state,
             "expected_observations": len(plan["observations"]),

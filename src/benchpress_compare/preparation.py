@@ -155,7 +155,7 @@ def _execute(engine, specs):
     return engine.run(specs, **options)
 
 
-def _task(engine, task, fields, *, python=sys.executable, profile=None):
+def _task_spec(engine, task, fields, *, python=sys.executable, profile=None):
     profile = profile or runtime_profile(
         native_threads=engine.config.native_threads,
         wall_seconds=engine.config.wall_seconds,
@@ -174,20 +174,41 @@ def _task(engine, task, fields, *, python=sys.executable, profile=None):
         if build["env_python"] == str(python)
     ]
     if matching_builds:
+        # Workers compare the frozen identity against the manifest's produced
+        # binary identity, which includes the wheel and native extension hashes.
         identity["manifest_path"] = matching_builds[0]["manifest_path"]
-        identity["build_id"] = matching_builds[0]["build_key"]
-    spec = {
+        identity["build_id"] = matching_builds[0].get(
+            "build_id", matching_builds[0]["build_key"]
+        )
+    return {
         **identity,
         "schema_version": 1,
         "phase": "tasks",
         "observation_id": canonical_hash(identity),
     }
-    result = _execute(engine, [spec])[0]
-    if result["status"] != "SUCCEEDED":
-        raise PreparationError(
-            f"Preparation task {task} failed: {result.get('reason', result.get('error', 'missing failure reason'))}"
-        )
-    return result["result"]
+
+
+def _tasks(engine, requests):
+    """Run preparation tasks together; each request is ``(task, fields, options)``.
+
+    Submitting a batch lets the LSF executor run independent tasks concurrently
+    and shard many small tasks into one job, instead of one queue wait per task.
+    """
+    specs = [_task_spec(engine, task, fields, **options) for task, fields, options in requests]
+    results = _execute(engine, specs)
+    failures = [
+        (spec["task"], result.get("reason", result.get("error", "missing failure reason")))
+        for spec, result in zip(specs, results)
+        if result["status"] != "SUCCEEDED"
+    ]
+    if failures:
+        suffix = f" ({len(failures)} failed tasks)" if len(failures) > 1 else ""
+        raise PreparationError(f"Preparation task {failures[0][0]} failed: {failures[0][1]}{suffix}")
+    return [result["result"] for result in results]
+
+
+def _task(engine, task, fields, **options):
+    return _tasks(engine, [(task, fields, options)])[0]
 
 
 def _builds(engine, snapshots):
@@ -218,11 +239,13 @@ def _builds(engine, snapshots):
         },
     )
     build_profile = runtime_profile(
-        native_threads=engine.site.build_cpus if engine.site else config.native_threads,
+        native_threads=engine.site.build_cpus if engine.site else config.build_cpus,
         wall_seconds=engine.site.job_wall_seconds if engine.site else 14400,
-        memory_gb=engine.site.build_memory_gb if engine.site else config.worker_memory_gb,
+        memory_gb=engine.site.build_memory_gb
+        if engine.site
+        else max(config.worker_memory_gb, 16),
     )
-    builds = {}
+    requests = []
     for arm in ("baseline", "evolve"):
         snapshot = verify_snapshot(snapshots[arm])
         locator = canonical_hash(
@@ -239,20 +262,24 @@ def _builds(engine, snapshots):
             if arm == "baseline"
             else root / "builds/evolve" / locator
         )
-        manifest = _task(
-            engine,
-            "build",
-            {
-                "snapshot": snapshots[arm],
-                "destination": str(destination),
-                "dependency_lock": common,
-                "harness_wheel": str(wheel),
-                "rustup_home": str(
-                    Path(os.environ.get("RUSTUP_HOME", Path.home() / ".rustup")).resolve()
-                ),
-            },
-            profile=build_profile,
+        requests.append(
+            (
+                "build",
+                {
+                    "snapshot": snapshots[arm],
+                    "destination": str(destination),
+                    "dependency_lock": common,
+                    "harness_wheel": str(wheel),
+                    "rustup_home": str(
+                        Path(os.environ.get("RUSTUP_HOME", Path.home() / ".rustup")).resolve()
+                    ),
+                },
+                {"profile": build_profile},
+            )
         )
+    # Both arms build concurrently; each is an independent durable task.
+    builds = {}
+    for arm, manifest in zip(("baseline", "evolve"), _tasks(engine, requests)):
         verified = verify_build(Path(manifest["manifest_path"]).parent)
         if verified != manifest:
             raise IntegrityError(f"{arm} build differs from its preparation task receipt")
@@ -419,23 +446,26 @@ def prepare(config: RunConfig, *, continue_existing=False, retry_cancelled=False
             snapshots = _snapshot_paths(config, root)
             builds = _builds(engine, snapshots)
             engine.builds = builds
-            fixtures = []
-            for candidate in candidates:
-                destination = (
-                    root / "fixtures/inputs" / (canonical_hash(candidate["input_id"]) + ".json")
-                )
-                fixture = _task(
-                    engine,
+            fixture_requests = [
+                (
                     "freeze-fixture",
                     {
                         "candidate": candidate,
                         "corpus_root": str(mirror),
-                        "destination": str(destination),
+                        "destination": str(
+                            root
+                            / "fixtures/inputs"
+                            / (canonical_hash(candidate["input_id"]) + ".json")
+                        ),
                         "master_seed": config.master_seed,
                     },
-                    python=builds["baseline"]["env_python"],
+                    {"python": builds["baseline"]["env_python"]},
                 )
-                fixtures.append({**fixture, "path": str(destination)})
+                for candidate in candidates
+            ]
+            fixtures = []
+            for request, fixture in zip(fixture_requests, _tasks(engine, fixture_requests)):
+                fixtures.append({**fixture, "path": request[1]["destination"]})
                 _checked_artifact(fixtures[-1], kind="fixture")
             targets_result = _task(
                 engine,
@@ -449,16 +479,21 @@ def prepare(config: RunConfig, *, continue_existing=False, retry_cancelled=False
             targets = targets_result["targets"]
             for target in targets:
                 _checked_artifact(target, kind="target")
-            for arm in ("baseline", "evolve"):
-                imported = _task(
-                    engine,
-                    "validate-import",
-                    {
-                        "fixture_paths": [row["path"] for row in fixtures],
-                        "target_paths": [row["path"] for row in targets],
-                    },
-                    python=builds[arm]["env_python"],
-                )
+            imports = _tasks(
+                engine,
+                [
+                    (
+                        "validate-import",
+                        {
+                            "fixture_paths": [row["path"] for row in fixtures],
+                            "target_paths": [row["path"] for row in targets],
+                        },
+                        {"python": builds[arm]["env_python"]},
+                    )
+                    for arm in ("baseline", "evolve")
+                ],
+            )
+            for arm, imported in zip(("baseline", "evolve"), imports):
                 if (
                     imported.get("status") != "verified"
                     or imported.get("fixtures") != [row["fixture_hash"] for row in fixtures]
@@ -540,7 +575,11 @@ def prepare(config: RunConfig, *, continue_existing=False, retry_cancelled=False
                 "cases": cases,
                 "transpile_contract": TRANSPILE_CONTRACT,
                 "validation_policy": {
-                    "required": "verified-semantic-routing-layout-target",
+                    "protocol": PROTOCOLS["validation"],
+                    "required": ["target_legality", "layout", "routing"],
+                    "disclosed": ["semantics"],
+                    "semantics": "bounded exact oracle; unsupported beyond its bounds is "
+                    "disclosed coverage, mismatch or error invalidates the observation",
                     "embedding": {
                         "algorithm": "checked-cz-subgraph-v1",
                         "budget_seconds": 1.0,
@@ -644,7 +683,7 @@ def prepare(config: RunConfig, *, continue_existing=False, retry_cancelled=False
                     "No candidates passed all six configurations; no comparison plan published"
                 )
             try:
-                weights = allocate_weights(admitted, require_all_families=not bool(config.smoke))
+                weights = allocate_weights(admitted, require_all_families=config.complete_families_required)
             except WeightError as exc:
                 raise PreparationError(str(exc)) from exc
             admitted_cases = [
@@ -658,7 +697,7 @@ def prepare(config: RunConfig, *, continue_existing=False, retry_cancelled=False
                 if case["input_id"] in coverage["admitted"]
             ]
             admitted_cases = assign_case_weights(
-                admitted_cases, weights, require_all_families=not bool(config.smoke)
+                admitted_cases, weights, require_all_families=config.complete_families_required
             )
             atomic_write_json(root / "weights.json", weights)
             engine.state("PILOTING")
@@ -682,13 +721,17 @@ def prepare(config: RunConfig, *, continue_existing=False, retry_cancelled=False
             for case in admitted_cases:
                 case["runtime_profile"] = profiles[case["case_id"]]
             observations = observations_for(admitted_cases, builds, profiles=profiles)
-            bundles = pack(
-                observations,
-                estimates["cases"],
-                wall_limit=engine.site.job_wall_seconds
-                if engine.site
-                else max(spec["runtime_profile"]["wall_seconds"] for spec in observations) * 12,
-            )
+            if engine.site:
+                # Pack to the site's target job length so collection spreads over
+                # many concurrent jobs; one expensive case may still need longer.
+                largest = max(value["estimated_seconds"] for value in estimates["cases"].values())
+                wall_limit = min(
+                    engine.site.job_wall_seconds,
+                    max(engine.site.target_job_seconds, math.ceil(largest / 0.9) + 11),
+                )
+            else:
+                wall_limit = max(spec["runtime_profile"]["wall_seconds"] for spec in observations) * 12
+            bundles = pack(observations, estimates["cases"], wall_limit=wall_limit)
             cached = [
                 spec["observation_id"]
                 for spec in observations
@@ -724,7 +767,7 @@ def prepare(config: RunConfig, *, continue_existing=False, retry_cancelled=False
                 "preparation_revisions": [revision["revision_hash"] for revision in revisions],
                 "conditional_on_unresolved": coverage["conditional_on_unresolved"],
                 "weights_audit": audit_case_weights(
-                    admitted_cases, require_all_families=not bool(config.smoke)
+                    admitted_cases, require_all_families=config.complete_families_required
                 ),
                 "expected_counts": {
                     "candidates": len(candidates),

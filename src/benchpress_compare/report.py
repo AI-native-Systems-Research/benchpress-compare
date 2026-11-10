@@ -117,6 +117,8 @@ def build_report(
     ]
     validations = Counter()
     scopes = Counter()
+    semantic_statuses = Counter()
+    semantic_reasons = Counter()
     routing = []
     resources = []
     for item in relevant:
@@ -127,6 +129,13 @@ def build_report(
         if isinstance(validation, dict):
             checks = validation.get("checks", [])
             if isinstance(checks, dict):
+                semantic = checks.get("semantics")
+                if isinstance(semantic, dict):
+                    semantic_statuses[str(semantic.get("status", "missing"))] += 1
+                    if semantic.get("status") != "verified":
+                        semantic_reasons[str(semantic.get("reason", "unspecified"))] += 1
+                else:
+                    semantic_statuses["missing"] += 1
                 checks = list(checks.values())
             for check in checks:
                 if isinstance(check, dict):
@@ -225,6 +234,14 @@ def build_report(
         "validation_coverage": {
             "statuses": dict(sorted(validations.items())),
             "scopes": dict(sorted(scopes.items())),
+            "required_checks": ["target_legality", "layout", "routing"],
+            "semantics": {
+                "statuses": dict(sorted(semantic_statuses.items())),
+                "reasons": dict(sorted(semantic_reasons.items())),
+                "note": "Exact semantic equivalence is certified only where the bounded "
+                "oracle applies; other observations are certified by native legality, "
+                "layout validity and exact routing replay, not full equivalence.",
+            },
         },
         "routing_diagnostics": routing,
         "routing_summary": routing_summary,
@@ -328,6 +345,11 @@ def render_markdown(report: dict) -> str:
         f"Validation statuses: `{_escape(json.dumps(report['validation_coverage']['statuses'], sort_keys=True))}`.",
         "",
         f"Validation scopes: `{_escape(json.dumps(report['validation_coverage']['scopes'], sort_keys=True))}`.",
+        "",
+        f"Required certificates: `{_escape(json.dumps(report['validation_coverage'].get('required_checks', []), sort_keys=True))}`. "
+        f"Semantic oracle coverage: `{_escape(json.dumps(report['validation_coverage'].get('semantics', {}).get('statuses', {}), sort_keys=True))}`. "
+        "Observations without `verified` semantics are certified by legality, layout and exact routing replay only; "
+        "this is not a proof of full equivalence.",
         "",
     ]
     if report.get("coverage"):

@@ -5,6 +5,7 @@ import pytest
 from benchpress_compare.validation import (
     routing_replay,
     layout_validation,
+    summarize_validation,
     target_legality,
     validate_semantics,
 )
@@ -119,3 +120,22 @@ def test_large_circuits_cannot_masquerade_as_semantically_verified():
     evidence = validate_semantics(encoded, encoded, list(range(9)), list(range(9)))
     assert evidence["status"] == "unsupported"
     assert evidence["reason"] == "semantic_certificate_required"
+
+
+def test_validation_summary_requires_certificates_and_discloses_bounded_semantics():
+    verified = {name: {"status": "verified"} for name in ("target_legality", "layout", "routing")}
+    beyond = {"status": "unsupported", "reason": "semantic_certificate_required"}
+    summary = summarize_validation({**verified, "semantics": beyond})
+    assert summary["status"] == "verified"
+    assert summary["semantic_coverage"] == "unsupported"
+    assert summary["checks"]["semantics"]["required"] is False
+    assert all(summary["checks"][name]["required"] for name in verified)
+    exact = summarize_validation({**verified, "semantics": {"status": "verified"}})
+    assert exact["status"] == "verified" and exact["checks"]["semantics"]["required"] is True
+    assert summarize_validation({**verified, "semantics": {"status": "mismatch"}})["status"] == (
+        "mismatch"
+    )
+    assert summarize_validation({**verified, "semantics": {"status": "error"}})["status"] == "error"
+    routing_unsupported = {**verified, "routing": {"status": "unsupported"}, "semantics": beyond}
+    assert summarize_validation(routing_unsupported)["status"] == "unsupported"
+    assert summarize_validation({"layout": {"status": "verified"}})["status"] == "error"

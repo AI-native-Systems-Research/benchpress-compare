@@ -194,8 +194,12 @@ def _relative_name(value: str) -> Path:
     return relative
 
 
-def verify_bundle(path: Path | str) -> dict | None:
-    """Ignore incomplete bundles; raise on corruption of a published bundle."""
+def verify_bundle(path: Path | str, *, check_artifacts: bool = True) -> dict | None:
+    """Ignore incomplete bundles; raise on corruption of a published bundle.
+
+    ``check_artifacts=False`` verifies only the manifest, for progress displays;
+    every consumer of results or artifacts keeps the full check.
+    """
     path = Path(path)
     if not (path / "COMPLETE").is_file():
         return None
@@ -203,6 +207,8 @@ def verify_bundle(path: Path | str) -> dict | None:
     if marker.get("manifest_hash") != file_hash(path / "manifest.json"):
         raise IntegrityError(f"Bundle manifest checksum mismatch: {path}")
     manifest = _read_json(path / "manifest.json")
+    if not check_artifacts:
+        return manifest
     for name, expected in manifest.get("artifacts", {}).items():
         artifact = path / _relative_name(name)
         if (

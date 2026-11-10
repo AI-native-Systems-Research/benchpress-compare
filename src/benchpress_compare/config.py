@@ -46,10 +46,12 @@ class RunConfig:
     memory_gb: float | None = None
     wall_seconds: float = 3600
     worker_memory_gb: float = 8
+    build_cpus: int = 4
     infrastructure_retries: int = 1
     lsf_config: str | None = None
     smoke: list[str] = field(default_factory=list)
     accept_unresolved: bool = False
+    allow_missing_families: bool = False
     design: str = "benchpress-eight-family-v1"
     schema_version: int = 1
 
@@ -69,7 +71,7 @@ class RunConfig:
             if any(overlapping(source, destination) for source in sources):
                 raise CompareError("Destinations must be outside and not contain source trees")
             _writable(destination)
-        for key in ("seeds", "native_threads"):
+        for key in ("seeds", "native_threads", "build_cpus"):
             if not isinstance(getattr(self, key), int) or getattr(self, key) <= 0:
                 raise CompareError(f"{key} must be a positive integer")
         if self.seeds > (1 << 29):
@@ -100,7 +102,15 @@ class RunConfig:
             SiteConfig.read(self.lsf_config)
         if self.smoke:
             self.design = "benchpress-smoke-v1"
+        elif self.allow_missing_families:
+            # A reduced design is an explicitly named configuration, never the
+            # standard eight-family score with silently redistributed weight.
+            self.design = "benchpress-reduced-families-v1"
         return self
+
+    @property
+    def complete_families_required(self) -> bool:
+        return not (self.smoke or self.allow_missing_families)
 
     def to_dict(self):
         return asdict(self)
@@ -118,6 +128,12 @@ class SiteConfig:
     poll_seconds: float = 10
     visibility_grace_seconds: float = 300
     job_wall_seconds: int = 86400
+    # Comparison jobs are packed to about this length so that a run spreads over
+    # many concurrent jobs; a single expensive case may still require more.
+    target_job_seconds: int = 7200
+    # Preparation shards (preflight, pilot, fixtures) hold at most this many
+    # sequential observations, also bounded by the job wall limit.
+    shard_max_observations: int = 24
     memory_unit: str = "MB"
     memory_limit_unit: str | None = None
     memory_reservation_unit: str | None = None

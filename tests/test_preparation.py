@@ -154,8 +154,12 @@ def fake_preparation(monkeypatch):
             }
         raise AssertionError(name)
 
+    def tasks(engine, requests):
+        return [task(engine, name, fields, **options) for name, fields, options in requests]
+
     monkeypatch.setattr(module, "ExecutionEngine", FakeEngine)
     monkeypatch.setattr(module, "_task", task)
+    monkeypatch.setattr(module, "_tasks", tasks)
     return state
 
 
@@ -339,4 +343,10 @@ def test_task_identity_includes_limits_and_build_attestation(tmp_path):
     engine.config.wall_seconds = 7200
     _task(engine, "validate-import", {"fixture_paths": []}, python="/env/bin/python")
     assert engine.specs[0]["manifest_path"] == "/build/manifest.json"
+    assert engine.specs[0]["build_id"] == "build"
     assert engine.specs[0]["observation_id"] != engine.specs[1]["observation_id"]
+    # A verified manifest carries the produced binary identity, which is what
+    # the worker compares against; the task must freeze that, not the build key.
+    engine.builds["baseline"]["build_id"] = "binary"
+    _task(engine, "validate-import", {"fixture_paths": []}, python="/env/bin/python")
+    assert engine.specs[2]["build_id"] == "binary"

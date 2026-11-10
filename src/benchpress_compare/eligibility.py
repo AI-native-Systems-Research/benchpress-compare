@@ -9,7 +9,7 @@ from typing import Iterable
 from .weights import LEVELS, TARGETS
 
 ADMISSION_POLICY = "baseline-three-seed-six-configuration-v1"
-REQUIRED_VALIDATION_CHECKS = frozenset({"target_legality", "layout", "routing", "semantics"})
+REQUIRED_VALIDATION_CHECKS = frozenset({"target_legality", "layout", "routing"})
 _SUCCESS = {"SUCCEEDED", "SUCCESS", "COMPLETE"}
 
 
@@ -41,9 +41,13 @@ def _validation_verified(result: dict) -> bool:
     for name, check in checks.items():
         if not isinstance(check, dict):
             return False
-        if (name in REQUIRED_VALIDATION_CHECKS or check.get("required", True)) and check.get(
-            "status"
-        ) != "verified":
+        status = check.get("status")
+        # A conclusive negative from any check, disclosed or required, disqualifies.
+        if status in {"mismatch", "error"}:
+            return False
+        if (name in REQUIRED_VALIDATION_CHECKS or check.get("required", True)) and (
+            status != "verified"
+        ):
             return False
     return True
 

@@ -38,9 +38,16 @@ def parser():
             command.add_argument("--memory-gb", type=float)
             command.add_argument("--wall-seconds", type=float)
             command.add_argument("--worker-memory-gb", type=float)
+            command.add_argument("--build-cpus", type=int)
             command.add_argument("--infrastructure-retries", type=int)
             command.add_argument("--smoke", action="append", metavar="INPUT_ID")
             command.add_argument("--accept-unresolved", action="store_true", default=None)
+            command.add_argument(
+                "--allow-missing-families",
+                action="store_true",
+                default=None,
+                help="Freeze an explicitly named reduced design when a family is empty",
+            )
         if name in {"run", "prepare", "resume"}:
             command.add_argument("--wait", action="store_true")
         if name in {"resume", "_controller"}:

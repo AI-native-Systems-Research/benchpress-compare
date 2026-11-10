@@ -177,7 +177,12 @@ def _run_task(spec, output):
         raise ValueError(f"Unknown worker task: {task}")
     from benchpress_compare.corpus.ir import export_circuit
     from benchpress_compare.metrics import measure
-    from benchpress_compare.validation import target_legality, layout_validation, validate_semantics
+    from benchpress_compare.validation import (
+        layout_validation,
+        summarize_validation,
+        target_legality,
+        validate_semantics,
+    )
     from .adapter import compile_observation
 
     fixture, circuit = _fixture(spec["fixture_path"])
@@ -227,25 +232,22 @@ def _run_task(spec, output):
             if workload is not None
             else {"status": "unknown", "reason": "no_post_initialization_workload"}
         )
-    statuses = {v["status"] for v in checks.values()}
-    validation_status = next(
-        (s for s in ("error", "mismatch", "unsupported") if s in statuses), "verified"
-    )
+    validation = summarize_validation(checks)
     artifacts.update(
         {
             "output.json": serialized,
             "layout.json": {"schema_version": 1, "initial": initial, "final": final},
             "diagnostics.json": diagnostics,
-            "validation.json": {"schema_version": 1, "status": validation_status, "checks": checks},
+            "validation.json": validation,
         }
     )
     return {
-        "status": "SUCCEEDED" if validation_status == "verified" else "INVALID",
+        "status": "SUCCEEDED" if validation["status"] == "verified" else "INVALID",
         "N2": measured["N2"],
         "D2": measured["D2"],
         "metric_protocol": measured["protocol"],
         "diagnostics": diagnostics,
-        "validation": {"schema_version": 1, "status": validation_status, "checks": checks},
+        "validation": validation,
         "output_size": len(serialized["operations"]),
     }, artifacts
 
