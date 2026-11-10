@@ -95,14 +95,21 @@ results.
 When collection finishes, open `<results-root>/reports/report.md` for the readable
 summary. 
 
-Inputs with failed or missing baseline measurements are excluded. An evolve
-failure on an admitted input makes the main score unavailable; the report also
-shows a labelled partial score. An empty circuit family also blocks the standard
-score. Read exclusions and failures alongside the scores.
+Some failures change which score you get:
 
-Accepted outputs are checked for native target compatibility. Semantic
-equivalence with the input circuit is not checked, so these scores alone do not
-establish compiler correctness.
+- **Baseline fails on an input.** That input is left out of the score. It still
+  appears in the report, with zero weight.
+- **Evolve fails on an input the baseline completed.** The report shows no main
+  score. It shows a partial score instead: one that leaves out the failed
+  circuits, labelled with how many it leaves out and how much of the total
+  weight they carry.
+- **A circuit family ends up with no inputs.** The report shows no score, because
+  the missing family's weight is not handed to the other families. To score
+  anyway, rerun with `--allow-missing-families`; the report then labels the
+  result as a reduced design.
+
+Before trusting a score, check the exclusions and failures listed next to it.
+
 
 ## More detail
 
