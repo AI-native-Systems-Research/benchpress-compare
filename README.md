@@ -7,7 +7,7 @@ depth (D2)** separately. Scores are `evolve / baseline`: below 1 is better.
 ## Quick start
 
 You need [uv](https://docs.astral.sh/uv/getting-started/installation/), Python
-3.12 (pinned to 3.12.12), and two Qiskit source directories containing
+3.12, and two Qiskit source directories containing
 `pyproject.toml`. You also need the Rust/Cargo and native compiler toolchain
 required by those Qiskit versions. The tool builds each version in its own
 environment; you do not need to install Qiskit yourself.
@@ -32,10 +32,7 @@ git -C ../benchpress checkout 4c04b38a53fc231a89f1a6bc9541c1b641ed6dcf
 ```
 
 **`--corpus` is the path to that BenchPress checkout's root directory**, such as
-`../benchpress`. It is not a Qiskit source directory, an individual circuit file,
-or the nested `benchpress/` package directory. The tool checks the revision and
-asset hashes before using it. An extracted archive of the same revision also
-works.
+`../benchpress`.
 
 ### 3. Run locally
 
@@ -68,15 +65,15 @@ trees. For an A/A check, pass the same source directory to both `--baseline` and
 
 ## Run on LSF
 
-Submit a complete comparison, replacing `/shared/...` with your shared paths:
+Submit a complete comparison:
 
 ```bash
 uv run benchpress-compare run \
-  --baseline /shared/sources/qiskit-baseline \
-  --evolve /shared/sources/qiskit-evolve \
-  --corpus /shared/sources/benchpress \
-  --store /shared/benchmarks/store \
-  --results-root /shared/benchmarks/results/lsf-small \
+  --baseline ../qiskit-baseline \
+  --evolve ../qiskit-evolve \
+  --corpus ../benchpress \
+  --store ./store \
+  --results-root ./results/lsf-small \
   --profile small \
   --executor lsf --lsf-config lsf-site.toml
 ```
@@ -89,30 +86,14 @@ uv run benchpress-compare run \
 | `evolve` | 44 | Heavy-hex / L2 | 264 |
 | `full` (default) | 149 | Square, heavy-hex, FakeTorino / L2 and L3 | 5,364 |
 
-Use `small` to screen changes, `evolve` for a larger check, and `full` to confirm
-results. Each keeps all eight circuit families. Counts are before baseline
-admission. Defaults are 3 seeds, 1 native thread, and 8 GB per worker. Per
-measurement time limits are 60 seconds for small, 900 for evolve, and 3,600 for
-full; override with `--wall-seconds`. Small still builds both Qiskit versions.
+Use `small` to for a short run, `evolve` when using in evolve frameworks like Coral, and `full` to confirm
+results. 
 
-## Check progress and read results
+## Read results
 
-Use your run's results path in these commands (the local example is shown):
-
-```bash
-uv run benchpress-compare status --results-root ./benchmark-results/local-small
-uv run benchpress-compare resume --results-root ./benchmark-results/local-small
-```
-
-`resume` uses the saved configuration and keeps successful measurements. Source
-edits do not change an existing run; use a new results directory to test them.
-To stop a run, use `cancel --results-root <path>`. Restart explicitly cancelled
-work with `resume --results-root <path> --retry-cancelled`.
 
 When collection finishes, open `<results-root>/reports/report.md` for the readable
-summary. The same directory contains `summary.json`, `cases.csv`, and
-`observations.csv`. You can regenerate reports with
-`uv run benchpress-compare report --results-root <path>` without Qiskit installed.
+summary. 
 
 Inputs with failed or missing baseline measurements are excluded. An evolve
 failure on an admitted input makes the main score unavailable; the report also
@@ -125,16 +106,9 @@ establish compiler correctness.
 
 ## More detail
 
-- [Benchmark flow and result layout](docs/benchmark_flow.md)
-- [Validation coverage and remaining checks](docs/validation_coverage.md)
 - Profile specifications: [small](docs/design/benchpress_subset_small_spec.md),
   [evolve](docs/design/benchpress_subset_evolve_spec.md),
   [full](docs/design/benchpress_subset_spec.md)
 - All options: `uv run benchpress-compare run --help`
 
-For development checks, run `uv run --locked pytest` and
-`uv run --locked ruff check src tests`. Tests requiring the pinned Qiskit/provider
-environment use `uv run --locked --group integration pytest`.
 
-Adapted BenchPress recipes retain their
-[Apache 2.0 license](data/LICENSE-BENCHPRESS.txt).
