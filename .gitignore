@@ -9,3 +9,9 @@ build/
 *.egg-info/
 .coverage
 htmlcov/
+store/
+results/
+.probe/
+lsf-site.toml
+results-smoke/
+logs/
