@@ -1,147 +1,100 @@
-from copy import deepcopy
 from itertools import product
 
-import pytest
-
-from benchpress_compare.eligibility import (
-    evaluate_configuration,
-    evaluate_input,
-    resolve_candidates,
-)
-from benchpress_compare.weights import LEVELS, TARGETS
+from benchpress_compare.eligibility import admit, apply_admission
+from benchpress_compare.weights import LEVELS, TARGETS, read_fraction
 
 
-def records(counts=(9, 10, 11)):
+def cases(input_id, family="F1", **extra):
     return [
         {
-            "observation_id": f"obs-{seed}",
-            "input_id": "input",
-            "arm": "baseline",
-            "phase": "preflight",
+            "case_id": f"{input_id}/{target}/{level}",
+            "input_id": input_id,
+            "target_class": target,
+            "level": level,
+            "family": family,
+            "band": "S",
+            "recipe": input_id,
+            "seeds": [1, 2, 3],
+            **extra,
+        }
+        for target, level in product(TARGETS, LEVELS)
+    ]
+
+
+def results(planned, arm="baseline", **change):
+    return [
+        {
+            "observation_id": f"{case['case_id']}/{arm}/{seed}",
+            "case_id": case["case_id"],
+            "arm": arm,
+            "phase": "comparison",
             "seed": seed,
             "status": "SUCCEEDED",
             "N2": 100,
             "D2": 40,
             "validation": {
                 "status": "verified",
-                "checks": {
-                    name: {"status": "verified"}
-                    for name in ("target_legality",)
-                },
+                "checks": {"target_legality": {"status": "verified"}},
             },
-            "sabre_executed": True,
-            "inserted_swaps": count,
+            **change,
         }
-        for seed, count in enumerate(counts, 1)
+        for case in planned
+        for seed in case["seeds"]
     ]
 
 
-def complete_input():
-    return [
-        {**row, "target_class": target, "level": level}
-        for target, level in product(TARGETS, LEVELS)
-        for row in records()
-    ]
+def test_input_is_dropped_when_any_baseline_observation_failed_or_is_missing():
+    planned = cases("a") + cases("b") + cases("c")
+    observations = results(planned)
+    failed = next(row for row in observations if row["case_id"].startswith("b/"))
+    failed.update(status="COMPILER_FAILED", reason="native_crash", N2=None, D2=None)
+    observations = [row for row in observations if row["observation_id"] != "c/square/2/baseline/1"]
+    admission = admit(planned, observations)
+    assert admission["admitted"] == ["a"]
+    records = {row["input_id"]: row for row in admission["records"]}
+    assert records["b"]["reasons"] == ["baseline_failed"]
+    assert records["b"]["baseline_failures"][0]["reason"] == "native_crash"
+    assert records["c"]["reasons"] == ["baseline_missing"]
 
 
-def test_median_boundary_and_every_seed_sabre():
-    assert evaluate_configuration(records())["status"] == "qualifying"
-    assert evaluate_configuration(records((8, 9, 100)))["status"] == "ineligible"
-    observations = records()
-    observations[0]["sabre_executed"] = False
-    result = evaluate_configuration(observations)
-    assert result["status"] == "ineligible"
-    assert "sabre_bypassed" in result["reasons"]
-
-
-def test_summary_label_does_not_substitute_for_required_validation_evidence():
-    observations = records()
+def test_unverified_success_is_not_a_baseline_success():
+    planned = cases("a")
+    observations = results(planned)
     observations[0]["validation"] = {"status": "verified"}
-    assert evaluate_configuration(observations)["status"] == "unresolved"
-    # An observation cannot declare a required certificate optional to bypass
-    # the admission contract when target legality is unsupported.
-    observations = records()
-    observations[0]["validation"]["checks"]["target_legality"] = {
-        "status": "unsupported",
-        "required": False,
-    }
-    assert evaluate_configuration(observations)["status"] == "unresolved"
-    observations = records()
-    observations[0]["validation"]["checks"]["target_legality"] = {
-        "status": "mismatch",
-        "required": False,
-    }
-    assert evaluate_configuration(observations)["status"] == "unresolved"
+    assert admit(planned, observations)["dropped"] == ["a"]
 
 
-@pytest.mark.parametrize(
-    "change",
-    [
-        {"status": "RESOURCE_LIMIT"},
-        {"N2": None},
-        {"D2": -1},
-        {"validation": {"status": "unsupported"}},
-        {"inserted_swaps": None},
-        {"sabre_executed": None},
-    ],
-)
-def test_failures_are_unresolved_not_evidence_of_locality(change):
-    observations = records()
-    observations[0].update(change)
-    assert evaluate_configuration(observations)["status"] == "unresolved"
+def test_evolve_results_never_affect_admission():
+    planned = cases("a")
+    evolve = results(planned, arm="evolve", status="COMPILER_FAILED", N2=None, D2=None)
+    assert admit(planned, results(planned) + evolve)["admitted"] == ["a"]
+    assert admit(planned, evolve)["dropped"] == ["a"]
 
 
-def test_seed_contract_and_evolve_rejection():
-    assert evaluate_configuration(records()[:2])["status"] == "unresolved"
-    assert evaluate_configuration(records(), seeds=[4, 5, 6])["status"] == "unresolved"
-    observations = records()
-    observations[0]["arm"] = "evolve"
-    with pytest.raises(ValueError, match="evolve"):
-        evaluate_configuration(observations)
+def test_structural_variant_replaces_its_canonical_only_when_canonical_baseline_failed():
+    planned = cases("canonical") + cases("variant", structural_canonical="canonical")
+    observations = results(planned)
+    records = {row["input_id"]: row for row in admit(planned, observations)["records"]}
+    assert records["canonical"]["status"] == "admitted"
+    assert records["variant"]["reasons"] == ["structural_duplicate"]
+    observations[0]["status"] = "RESOURCE_LIMIT"
+    assert admit(planned, observations)["admitted"] == ["variant"]
 
 
-def test_all_six_configurations_and_embedding_unknown_disclosure():
-    result = evaluate_input("input", complete_input())
-    assert result["status"] == "admitted"
-    assert result["embedding"]["status"] == "unknown"
-    assert evaluate_input("input", complete_input()[:-1])["status"] == "unresolved"
-    result = evaluate_input(
-        "input",
-        complete_input(),
-        embedding={"status": "verified", "zero_routing": True, "evidence": "mapping-sha256"},
-    )
-    assert result["status"] == "ineligible"
-    with pytest.raises(ValueError, match="requires evidence"):
-        evaluate_input("input", complete_input(), embedding={"status": "verified"})
+def test_dropped_inputs_are_zero_weight_supplemental_cases():
+    planned = cases("a") + cases("b", family="F2")
+    observations = results(planned)
+    observations[-1]["status"] = "INVALID"
+    plan = apply_admission({"cases": planned, "config": {"smoke": ["a", "b"]}}, observations)
+    weights = {case["input_id"]: read_fraction(case["weight"]) for case in plan["cases"]}
+    assert weights["b"] == 0 and weights["a"] > 0
+    assert plan["admission"]["weights_error"] is None
+    assert all(case["supplemental"] for case in plan["cases"] if case["input_id"] == "b")
 
 
-def test_structural_priority_and_fallback():
-    candidates = [{"input_id": "canonical"}, {"input_id": "variant"}]
-    evidence = [
-        {"input_id": "canonical", "status": "admitted"},
-        {"input_id": "variant", "status": "admitted"},
-    ]
-    groups = [
-        {
-            "members": ["canonical", "variant"],
-            "priority": ["canonical", "variant"],
-            "status": "verified",
-            "evidence": "six-context-fingerprints",
-        }
-    ]
-    result = resolve_candidates(candidates, evidence, structural_groups=groups)
-    assert result["admitted"] == ["canonical"]
-    evidence = deepcopy(evidence)
-    evidence[0]["status"] = "ineligible"
-    assert resolve_candidates(candidates, evidence, structural_groups=groups)["admitted"] == [
-        "variant"
-    ]
-
-
-def test_unresolved_requires_recorded_explicit_decision():
-    candidates = [{"input_id": "missing"}]
-    assert not resolve_candidates(candidates, [])["freeze_allowed"]
-    result = resolve_candidates(candidates, [], accept_unresolved=True)
-    assert result["freeze_allowed"]
-    assert result["conditional_on_unresolved"] and result["requires_preparation_revision"]
-    assert result["admitted"] == []
+def test_empty_family_in_eight_family_design_yields_no_weights_instead_of_redistribution():
+    planned = cases("a")
+    plan = apply_admission({"cases": planned, "config": {}}, results(planned))
+    assert "empty families" in plan["admission"]["weights_error"]
+    assert all(read_fraction(case["weight"]) == 0 for case in plan["cases"])
+    assert plan["weights_audit"] is None

@@ -196,6 +196,49 @@ def build_report(
         for key, value in sorted(input_weights.items(), key=lambda pair: (-pair[1], pair[0]))
         if value > 0
     ]
+    failures = {arm: Counter() for arm in ("baseline", "evolve")}
+    for item in relevant:
+        state = str(item.get("status", "")).upper()
+        if state != "SUCCEEDED" and item.get("arm") in failures:
+            failures[item["arm"]][state] += 1
+    succeeded_baseline = {
+        (item["case_id"], item["seed"])
+        for item in relevant
+        if item.get("arm") == "baseline" and str(item.get("status", "")).upper() == "SUCCEEDED"
+    }
+    weighted = {case["case_id"]: case for case in selected if read_fraction(case["weight"]) > 0}
+    evolve_failures = sorted(
+        (
+            {
+                "input_id": weighted[item["case_id"]]["input_id"],
+                "case_id": item["case_id"],
+                "target_class": weighted[item["case_id"]].get("target_class"),
+                "level": weighted[item["case_id"]].get("level"),
+                "seed": item["seed"],
+                "status": item.get("status"),
+                "reason": item.get("reason"),
+            }
+            for item in relevant
+            if item.get("arm") == "evolve"
+            and str(item.get("status", "")).upper() != "SUCCEEDED"
+            and item["case_id"] in weighted
+            and (item["case_id"], item["seed"]) in succeeded_baseline
+        ),
+        key=lambda row: (row["input_id"], row["case_id"], row["seed"]),
+    )
+    # The main score stays unavailable while any evolve run failed. This
+    # secondary score leaves those circuits out and must be read together
+    # with how much it leaves out.
+    failed_inputs = sorted({row["input_id"] for row in evolve_failures})
+    partial = aggregate(
+        [case for case in cases if case["input_id"] not in failed_inputs],
+        observations,
+        query=normalized,
+    )
+    excluded_weight = sum(
+        (read_fraction(case["weight"]) for case in selected if case["input_id"] in failed_inputs),
+        read_fraction(0),
+    )
     observation_rows = [
         {key: value for key, value in item.items() if key != "artifacts"} for item in relevant
     ]
@@ -239,22 +282,30 @@ def build_report(
         "routing_diagnostics": routing,
         "routing_summary": routing_summary,
         "observed_resources": resources,
-        "pilot": plan.get("pilot"),
-        "coverage": plan.get("coverage"),
+        "admission": plan.get("admission"),
+        "failures": {
+            "by_arm": {arm: dict(sorted(counts.items())) for arm, counts in failures.items()},
+            "evolve_only": evolve_failures,
+        },
+        "score_without_evolve_failures": {
+            "excluded_inputs": failed_inputs,
+            "excluded_weight": fraction_record(excluded_weight),
+            "evolve_failed_observations": len(evolve_failures),
+            "metrics": {
+                metric: {
+                    key: partial["metrics"][metric][key]
+                    for key in ("available", "score", "change_percent", "reasons")
+                }
+                for metric in METRICS
+            },
+        },
         "weights_audit": plan.get("weights_audit", plan.get("weights")),
         "concentrations": concentrations,
-        "conditional_on_unresolved": bool(
-            plan.get(
-                "conditional_on_unresolved",
-                plan.get("coverage", {}).get("conditional_on_unresolved", False)
-                if isinstance(plan.get("coverage"), dict)
-                else False,
-            )
-        ),
         "observations": observation_rows,
         "notes": [
             "N2 and D2 are independent ratio-of-arithmetic-seed-means scores; lower is better.",
-            "All planned seeds and positive ratios are required. Missing data never changes frozen weights.",
+            "Inputs are dropped only when their own baseline failed; evolve results never change weights.",
+            "An evolve failure where baseline succeeded stays in the score and makes it unavailable.",
             "Seed spread is descriptive; this report makes no significance or acceptance-threshold claim.",
         ],
     }
@@ -283,11 +334,19 @@ def render_markdown(report: dict) -> str:
             "This is a smoke subset; it does not establish the complete eight-family score.",
             "",
         ]
-    if report["conditional_on_unresolved"]:
+    admission = report.get("admission")
+    if admission:
         lines += [
-            "The cohort is conditional on unresolved screening candidates; see coverage gaps.",
+            f"Admission (`{_escape(admission['policy'])}`): {len(admission['admitted'])} of "
+            f"{admission['candidate_count']} inputs scored; {len(admission['dropped'])} dropped "
+            "because their baseline failed or they duplicate a scored structural variant.",
             "",
         ]
+        if admission.get("weights_error"):
+            lines += [
+                f"No weights could be assigned: {_escape(admission['weights_error'])}.",
+                "",
+            ]
     lines += [
         f"Expected: {summary['expected_circuits']} canonical circuits, {summary['expected_cases']} cases, {summary['expected_observations']} observations. "
         f"Received: {summary['received_observations']}; successful: {summary['successful_observations']}; failed: {summary['failed_observations']}; cache hits: {summary['cache_hits']}.",
@@ -303,6 +362,23 @@ def render_markdown(report: dict) -> str:
         lines.append(
             f"| {metric} | {_display(result['score'])} | {_display(result['change_percent'])} | {counts['better']} | {counts['same']} | {counts['worse']} | {counts['unclassifiable']} |"
         )
+    partial = report["score_without_evolve_failures"]
+    if partial["excluded_inputs"]:
+        lines += [
+            "",
+            f"Score without evolve-failed circuits (PARTIAL: leaves out "
+            f"{len(partial['excluded_inputs'])} circuits, "
+            f"{100 * float(read_fraction(partial['excluded_weight'])):.3g}% of the weight, where "
+            f"{partial['evolve_failed_observations']} evolve runs failed; see Failures):",
+            "",
+        ]
+        for metric in METRICS:
+            result = partial["metrics"][metric]
+            lines.append(
+                f"- {metric}: {_display(result['score'])}; change {_display(result['change_percent'])}%"
+                if result["available"]
+                else f"- {metric}: unavailable ({_escape(', '.join(result['reasons']))})"
+            )
     lines += ["", "Equal-band sensitivity:", ""]
     for metric in METRICS:
         result = report["sensitivity"]["metrics"][metric]
@@ -345,8 +421,6 @@ def render_markdown(report: dict) -> str:
         "Every accepted observation requires verified native target legality.",
         "",
     ]
-    if report.get("coverage"):
-        lines += ["Coverage and exclusions are retained in `summary.json` under `coverage`.", ""]
     if report["concentrations"]:
         lines += ["Largest input allocations (fraction of the frozen main score):", ""]
         for item in report["concentrations"][:5]:
@@ -360,6 +434,32 @@ def render_markdown(report: dict) -> str:
             + ", ".join(f"`{_escape(key)}`" for key in report["crossed_metric_circuits"])
             + ".",
         ]
+    lines += ["", "## Failures", ""]
+    for arm, counts in report["failures"]["by_arm"].items():
+        lines.append(
+            f"- {arm}: "
+            + (", ".join(f"{_escape(key)} {value}" for key, value in counts.items()) or "none")
+            + "."
+        )
+    evolve_only = report["failures"]["evolve_only"]
+    lines += [
+        "",
+        f"Evolve failed where baseline succeeded: {len(evolve_only)} observations"
+        + (" (these count against evolve and are never dropped):" if evolve_only else "."),
+        "",
+    ]
+    for row in evolve_only:
+        lines.append(
+            f"- `{_escape(row['input_id'])}` {_escape(row['target_class'])} L{row['level']} "
+            f"seed {row['seed']}: {_escape(row['status'])} ({_escape(row['reason'])})"
+        )
+    if admission and admission["dropped"]:
+        lines += ["", "Dropped inputs:", ""]
+        for record in admission["records"]:
+            if record["status"] == "dropped":
+                lines.append(
+                    f"- `{_escape(record['input_id'])}`: {_escape(', '.join(record['reasons']))}"
+                )
     lines += [
         "",
         "## Circuit summaries",
@@ -417,7 +517,7 @@ def render_markdown(report: dict) -> str:
         )
     lines += [
         "",
-        "Pilot predictions, runtime profiles, build provenance, and artifact references are retained in `summary.json`. Timings are resource-planning diagnostics.",
+        "Admission records, runtime profiles, build provenance, and artifact references are retained in `summary.json`. Timings are resource-planning diagnostics.",
     ]
     lines += [
         "",

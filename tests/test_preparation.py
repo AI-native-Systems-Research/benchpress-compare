@@ -12,15 +12,14 @@ from benchpress_compare.preparation import (
     _checked_artifact,
     _check_paired_builds,
     _harness_wheel,
-    _revision_chain,
     _snapshot_paths,
-    _structural_groups,
     _task,
     _verify_harness_wheel,
     prepare,
 )
 from benchpress_compare.builds import snapshot_source
-from benchpress_compare.weights import read_fraction
+from benchpress_compare.config import SiteConfig
+from benchpress_compare.planner import BIG_CIRCUITS
 
 
 def config(tmp_path, **kwargs):
@@ -37,14 +36,7 @@ def config(tmp_path, **kwargs):
 def fake_preparation(monkeypatch):
     import benchpress_compare.preparation as module
 
-    state = {
-        "unresolved": set(),
-        "interrupt_pilot": False,
-        "executed": [],
-        "received": {},
-        "states": [],
-        "tasks": [],
-    }
+    state = {"states": [], "tasks": [], "site": None}
     candidates = [
         {
             "input_id": f"input-{index}",
@@ -84,7 +76,7 @@ def fake_preparation(monkeypatch):
     class FakeEngine:
         def __init__(self, root, config, lease, plan_hash=None):
             self.root, self.config, self.lease, self.plan_hash = root, config, lease, plan_hash
-            self.site = None
+            self.site = state["site"]
             self.resources = {"usable_cpus": 8, "worker_memory_budget_bytes": 64 * 1024**3}
             from benchpress_compare.store import Store
 
@@ -94,35 +86,7 @@ def fake_preparation(monkeypatch):
             state["states"].append(status)
 
         def run(self, specs):
-            output = []
-            for spec in specs:
-                assert spec["arm"] == "baseline", "evolve measurement before plan freeze"
-                assert spec["phase"] in ("preflight", "pilot")
-                if spec["phase"] == "pilot" and state["interrupt_pilot"]:
-                    state["interrupt_pilot"] = False
-                    raise OSError("simulated interruption before pilot receipt")
-                key = spec["observation_id"]
-                if key not in state["received"]:
-                    state["executed"].append(spec)
-                    invalid = spec["input_id"] in state["unresolved"]
-                    state["received"][key] = {
-                        **spec,
-                        "status": "INVALID" if invalid else "SUCCEEDED",
-                        "N2": 50,
-                        "D2": 20,
-                        "validation": {
-                            "status": "unsupported" if invalid else "verified",
-                            "checks": {
-                                "target_legality": {
-                                    "status": "unsupported" if invalid else "verified"
-                                }
-                            },
-                        },
-                        "diagnostics": {"sabre_executed": True, "inserted_swaps": 10},
-                        "resources": {"elapsed_seconds": 1, "peak_rss_bytes": 100 * 1024**2},
-                    }
-                output.append(state["received"][key])
-            return output
+            raise AssertionError("preparation must not run observations")
 
     def task(engine, name, fields, **kwargs):
         state["tasks"].append(name)
@@ -166,79 +130,61 @@ def fake_preparation(monkeypatch):
     return state
 
 
-def test_full_freeze_has_exact_work_no_evolve_measurements_and_matched_profiles(
+def test_freeze_plans_every_input_on_both_arms_without_measuring_anything(
     tmp_path, fake_preparation
 ):
     cfg = config(tmp_path)
     plan = prepare(cfg)
     assert plan["expected_counts"] == {
         "candidates": 8,
-        "preflight": 144,
         "cases": 48,
         "main_observations": 288,
+        "jobs": 0,
     }
-    assert read_fraction(plan["weights"]["total_weight"]) == 1
-    assert set(fake_preparation["states"]) == {"PREPARING", "SCREENING", "PILOTING", "FROZEN"}
-    assert all(spec["arm"] == "baseline" for spec in fake_preparation["executed"])
+    assert fake_preparation["states"] == ["PREPARING", "FROZEN"]
+    assert "weights" not in plan and "pilot" not in plan
     for case in plan["cases"]:
+        assert "weight" not in case and len(case["seeds"]) == cfg.seeds
         observations = [row for row in plan["observations"] if row["case_id"] == case["case_id"]]
         assert {row["arm"] for row in observations} == {"baseline", "evolve"}
+        assert {row["phase"] for row in observations} == {"comparison"}
         assert all(row["runtime_profile"] == case["runtime_profile"] for row in observations)
-        preflight_seeds = {
-            row["seed"] for row in fake_preparation["executed"] if row["case_id"] == case["case_id"]
-        }
-        assert not set(case["seeds"]) & preflight_seeds
+    assert len({canonical_hash(case["runtime_profile"]) for case in plan["cases"]}) == 1
     before = (Path(cfg.results_root) / "plan.json").read_bytes()
     assert prepare(cfg, continue_existing=True) == plan
     assert (Path(cfg.results_root) / "plan.json").read_bytes() == before
 
 
-def test_resume_interrupted_pilot_reuses_preflight_without_changing_contract(
-    tmp_path, fake_preparation
-):
-    cfg = config(tmp_path)
-    fake_preparation["interrupt_pilot"] = True
-    with pytest.raises(OSError, match="simulated interruption"):
-        prepare(cfg)
-    root = Path(cfg.results_root)
-    assert not (root / "plan.json").exists()
-    before = (root / "preparation.json").read_bytes()
-    prepare(cfg, continue_existing=True)
-    assert before == (root / "preparation.json").read_bytes()
-    assert sum(spec["phase"] == "preflight" for spec in fake_preparation["executed"]) == 144
+def test_lsf_plan_gives_each_big_case_seed_its_own_job(tmp_path, fake_preparation, monkeypatch):
+    import benchpress_compare.preparation as module
+
+    catalogue = module.load_catalogue()
+    catalogue["candidates"][0] = dict(catalogue["candidates"][0], input_id="Q/large/bwt_n37")
+    monkeypatch.setattr(module, "load_catalogue", lambda: catalogue)
+    fake_preparation["site"] = SiteConfig(queue="normal", job_wall_seconds=172800)
+    plan = prepare(config(tmp_path))
+    big = [
+        bundle for bundle in plan["bundles"] if bundle["observations"][0]["input_id"] in BIG_CIRCUITS
+    ]
+    assert len(big) == 6 * 3
+    for bundle in big:
+        rows = bundle["observations"]
+        assert len({(row["case_id"], row["seed"]) for row in rows}) == 1 and len(rows) == 2
+    assert sum(len(bundle["observations"]) for bundle in plan["bundles"]) == 288
+    assert plan["expected_counts"]["jobs"] == len(plan["bundles"])
 
 
-def test_accept_unresolved_cannot_repair_empty_family(tmp_path, fake_preparation):
-    cfg = config(tmp_path)
-    fake_preparation["unresolved"] = {"input-8"}
-    with pytest.raises(PreparationError, match="unresolved mandatory"):
-        prepare(cfg)
-    root = Path(cfg.results_root)
-    before = (root / "preparation.json").read_bytes()
-    with pytest.raises(PreparationError, match="empty families"):
-        prepare(replace(cfg, accept_unresolved=True), continue_existing=True)
-    assert before == (root / "preparation.json").read_bytes()
-    assert not (root / "plan.json").exists()
-    revisions = _revision_chain(root, canonical_hash(read_json(root / "preparation.json")))
-    assert len(revisions) == 1 and revisions[0]["unresolved"] == ["input-8"]
-    assert read_json(root / "coverage.json")["conditional_on_unresolved"]
-    # The recorded decision survives a later ordinary continuation.
-    with pytest.raises(PreparationError, match="empty families"):
-        prepare(cfg, continue_existing=True)
+def test_smoke_plan_and_structural_variant_identity(tmp_path, fake_preparation, monkeypatch):
+    import benchpress_compare.preparation as module
 
-
-def test_smoke_explicit_conditional_decision_preserves_original_request(tmp_path, fake_preparation):
-    cfg = config(tmp_path, smoke=["input-1", "input-2"])
-    fake_preparation["unresolved"] = {"input-2"}
-    with pytest.raises(PreparationError):
-        prepare(cfg)
-    root = Path(cfg.results_root)
-    request = (root / "request.json").read_bytes()
-    plan = prepare(replace(cfg, accept_unresolved=True), continue_existing=True)
+    catalogue = module.load_catalogue()
+    catalogue["candidates"][1] = dict(catalogue["candidates"][1], structural_canonical="input-1")
+    monkeypatch.setattr(module, "load_catalogue", lambda: catalogue)
+    plan = prepare(config(tmp_path, smoke=["input-1", "input-2"]))
     assert plan["design"] == "benchpress-smoke-v1"
-    assert plan["conditional_on_unresolved"]
-    assert read_fraction(plan["weights"]["total_weight"]) == read_fraction("1/8")
-    assert request == (root / "request.json").read_bytes()
+    assert {case["input_id"] for case in plan["cases"]} == {"input-1", "input-2"}
+    variants = {case.get("structural_canonical") for case in plan["cases"]}
+    assert variants == {None, "input-1"}
 
 
 def test_frozen_plan_rejects_new_incompatible_request(tmp_path, fake_preparation):
@@ -277,21 +223,6 @@ def test_cached_external_artifact_cannot_be_substituted(tmp_path):
         )
 
 
-def test_revision_forks_are_integrity_errors(tmp_path):
-    for unresolved in (["one"], ["two"]):
-        revision = {
-            "schema_version": 1,
-            "decision": "accept-unresolved",
-            "parent_hash": "parent",
-            "unresolved": unresolved,
-        }
-        atomic_write_json(
-            tmp_path / "preparation/revisions" / (canonical_hash(revision) + ".json"), revision
-        )
-    with pytest.raises(IntegrityError, match="fork"):
-        _revision_chain(tmp_path, "parent")
-
-
 def test_build_pair_contract_rejects_toolchain_or_dependency_drift():
     attestation = {
         key: "same"
@@ -319,15 +250,6 @@ def test_build_pair_contract_rejects_toolchain_or_dependency_drift():
     evolve["request_identity"]["build_constraints"] = "different"
     with pytest.raises(PreparationError, match="build_constraints"):
         _check_paired_builds({"baseline": baseline, "evolve": evolve})
-
-
-def test_structural_variants_without_all_contexts_remain_unresolved():
-    groups = _structural_groups(
-        [{"input_id": "canonical"}, {"input_id": "variant", "structural_canonical": "canonical"}],
-        [],
-        [],
-    )
-    assert groups[0]["status"] == "unresolved"
 
 
 def test_task_identity_includes_limits_and_build_attestation(tmp_path):

@@ -41,7 +41,6 @@ def parser():
             command.add_argument("--build-cpus", type=int)
             command.add_argument("--infrastructure-retries", type=int)
             command.add_argument("--smoke", action="append", metavar="INPUT_ID")
-            command.add_argument("--accept-unresolved", action="store_true", default=None)
             command.add_argument(
                 "--allow-missing-families",
                 action="store_true",
@@ -52,8 +51,6 @@ def parser():
             command.add_argument("--wait", action="store_true")
         if name in {"resume", "_controller"}:
             command.add_argument("--retry-cancelled", action="store_true")
-        if name in {"resume", "_controller"}:
-            command.add_argument("--accept-unresolved", action="store_true", default=None)
         if name == "_controller":
             command.add_argument("--prepare-only", action="store_true")
     for name in ("status", "cancel", "export", "report"):
@@ -91,9 +88,6 @@ def _config(args):
             if supplied is None or field.name == "results_root":
                 continue
             saved = getattr(config, field.name)
-            if field.name == "accept_unresolved" and supplied is True:
-                config.accept_unresolved = True
-                continue
             if field.name in {"baseline", "evolve", "store", "corpus", "lsf_config"}:
                 supplied = str(Path(supplied).expanduser().resolve())
             if supplied != saved:
@@ -143,7 +137,7 @@ def main(argv=None):
                 "coverage_count": len(catalogue["coverage"]),
                 "catalogue_hash": canonical_hash(catalogue),
                 "revision": catalogue["revision"],
-                "expected_preflight_observations": 149 * 3 * 2 * 3,
+                "expected_observations": 149 * 6 * 3 * 2,
                 "planning_weights": weights["marginals"],
             }
             if args.corpus:
@@ -162,10 +156,12 @@ def main(argv=None):
 
             _json(export_run(args.results_root, args.output))
         elif args.command == "report":
+            from .eligibility import apply_admission
             from .orchestrator import read_results, status, verify_plan
             from .report import build_report, write_report
 
-            plan = verify_plan(args.results_root, check_harness=False)
+            results = read_results(args.results_root)
+            plan = apply_admission(verify_plan(args.results_root, check_harness=False), results)
             query = {
                 key: getattr(args, key)
                 for key in (
@@ -183,7 +179,7 @@ def main(argv=None):
                 args.results_root,
                 build_report(
                     plan,
-                    read_results(args.results_root),
+                    results,
                     query=query,
                     status=status(args.results_root),
                     group_by=args.group_by,

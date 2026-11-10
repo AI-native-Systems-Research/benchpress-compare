@@ -1,4 +1,4 @@
-"""Immutable observations and deterministic resource-compatible job packing."""
+"""Immutable observations and deterministic LSF job grouping."""
 
 from __future__ import annotations
 
@@ -7,6 +7,19 @@ from collections import defaultdict
 from .errors import PreparationError
 from .identity import canonical_hash, observation_identity
 from .schema import PROTOCOLS
+
+# Measured on the 2026-11-10 baseline screening (worst seed, one level).
+# Each seed of each case of these inputs runs in its own LSF job, so no slow
+# compile waits behind another in a sequential shard.
+BIG_CIRCUITS = {
+    "Q/large/bwt_n37": {"observed_seconds": 1500, "observed_peak_gb": 9},
+    "Q/large/square_root_n60": {"observed_seconds": 1470, "observed_peak_gb": 8},
+    "Q/large/vqe_uccsd_n28": {"observed_seconds": 355, "observed_peak_gb": 2},
+    "F/hwb12.qasm": {"observed_seconds": 346, "observed_peak_gb": 2.6},
+    "Q/medium/bwt_n21": {"observed_seconds": 339, "observed_peak_gb": 2.5},
+    "Q/medium/factor247_n15": {"observed_seconds": 338, "observed_peak_gb": 2.3},
+    "F/hwb11.qasm": {"observed_seconds": 178, "observed_peak_gb": None},
+}
 
 
 def observations_for(cases, builds, *, phase="comparison", profiles=None):
@@ -44,129 +57,37 @@ def observations_for(cases, builds, *, phase="comparison", profiles=None):
     return specs
 
 
-def pack(specs, estimates, *, wall_limit, overhead_seconds=10, margin=0.1, completed=()):
-    """Longest-first packing, splitting oversized cases into seed pairs then singles."""
-    if wall_limit <= overhead_seconds or not 0 <= margin < 1:
-        raise PreparationError("Invalid scheduler wall limit/margin")
-    completed = set(completed)
-    available = (wall_limit - overhead_seconds) * (1 - margin)
-    grouped = defaultdict(list)
+def shard_bundles(specs, *, max_observations, job_wall_seconds, overhead_seconds=10):
+    """Group observations into LSF jobs without runtime estimates.
+
+    Each (case, seed) of a ``BIG_CIRCUITS`` input gets its own job holding
+    both arms, so the paired observations share a node. Every other observation
+    is packed in plan order, at most ``max_observations`` per job and no more
+    than the job wall limit can hold at the frozen watchdog.
+    """
+    big, small = defaultdict(list), defaultdict(list)
     for spec in specs:
-        # Paired A/A builds can share a scientific key, but remain separate work.
-        if (spec["arm"], spec["observation_id"]) not in completed:
-            grouped[spec["case_id"]].append(spec)
+        if spec["input_id"] in BIG_CIRCUITS:
+            big[spec["case_id"], spec["seed"]].append(spec)
+        else:
+            small[canonical_hash(spec["runtime_profile"])].append(spec)
+    groups = [big[key] for key in sorted(big)]
+    for profile in sorted(small):
+        rows = small[profile]
+        wall = rows[0]["runtime_profile"]["wall_seconds"]
+        size = max(1, min(max_observations, int((job_wall_seconds - overhead_seconds) // wall)))
+        groups.extend(rows[offset : offset + size] for offset in range(0, len(rows), size))
     bundles = []
-    for case_id in sorted(grouped):
-        rows = grouped[case_id]
-        cost = estimates[case_id]["estimated_seconds"]
-        if cost > available:
-            raise PreparationError(f"Observation {case_id} cannot fit scheduler wall limit")
-        parts = [rows]
-        if len(rows) * cost > available:
-            by_seed = defaultdict(list)
-            for row in rows:
-                by_seed[row["seed"]].append(row)
-            parts = list(by_seed.values())
-        for part in parts:
-            for final in [part] if len(part) * cost <= available else [[row] for row in part]:
-                profile = canonical_hash(final[0]["runtime_profile"])
-                if any(canonical_hash(row["runtime_profile"]) != profile for row in final):
-                    raise PreparationError("Paired observations must have identical resources")
-                bundles.append(
-                    {"observations": final, "seconds": len(final) * cost, "profile": profile}
-                )
-    bins = []
-    for bundle in sorted(
-        bundles, key=lambda b: (-b["seconds"], b["observations"][0]["observation_id"])
-    ):
-        target = next(
-            (
-                job
-                for job in bins
-                if job["profile"] == bundle["profile"]
-                and job["seconds"] + bundle["seconds"] <= available
-            ),
-            None,
-        )
-        if target is None:
-            target = {"profile": bundle["profile"], "seconds": 0, "observations": []}
-            bins.append(target)
-        target["seconds"] += bundle["seconds"]
-        target["observations"].extend(bundle["observations"])
-    return [
-        {
-            "schema_version": 1,
-            "bundle_id": canonical_hash(job),
-            "estimated_seconds": job["seconds"] + overhead_seconds,
-            "runtime_profile": job["observations"][0]["runtime_profile"],
-            "observations": job["observations"],
+    for rows in groups:
+        profile = canonical_hash(rows[0]["runtime_profile"])
+        if any(canonical_hash(row["runtime_profile"]) != profile for row in rows):
+            raise PreparationError("A job must not mix observation resource profiles")
+        job = {
+            "observations": rows,
+            # Worst case: every observation runs to its frozen watchdog.
+            "estimated_seconds": overhead_seconds
+            + sum(row["runtime_profile"]["wall_seconds"] for row in rows),
+            "runtime_profile": rows[0]["runtime_profile"],
         }
-        for job in bins
-    ]
-
-
-def recommendations(
-    specs, estimates, bundles, resources, *, workers="auto", max_jobs=None, cached_baseline_ids=()
-):
-    from .pilot import worker_capacity
-
-    if not specs:
-        raise PreparationError("Cannot plan an empty comparison")
-    profiles = {canonical_hash(spec["runtime_profile"]): spec["runtime_profile"] for spec in specs}
-    capacity = min(
-        worker_capacity(resources, profile, len(specs), workers) for profile in profiles.values()
-    )
-    if max_jobs is not None:
-        capacity = min(capacity, max_jobs)
-    cached = set(cached_baseline_ids)
-    costs, savings = [], []
-    additional_artifact_bytes = 0
-    missing_artifact_cases = set()
-    for spec in specs:
-        case_estimate = estimates[spec["case_id"]]
-        cost = case_estimate["estimated_seconds"]
-        cached_baseline = spec["arm"] == "baseline" and spec["observation_id"] in cached
-        if cached_baseline:
-            savings.append(cost)
-        else:
-            costs.append((cost, spec["runtime_profile"]["native_threads"]))
-        artifact_bytes = case_estimate.get("observed_max_artifact_bytes")
-        if (
-            case_estimate.get("artifact_size_status") != "available"
-            or type(artifact_bytes) is not int
-            or artifact_bytes < 0
-        ):
-            missing_artifact_cases.add(spec["case_id"])
-        else:
-            # Attempts retain their artifacts; publication copies them into the
-            # run result and, for new baseline work, the reusable store.
-            copies = 1 if cached_baseline else 3 if spec["arm"] == "baseline" else 2
-            additional_artifact_bytes += copies * artifact_bytes
-    seconds = sum(cost for cost, _ in costs)
-    return {
-        "schema_version": 1,
-        "recommended_concurrency": capacity,
-        "planned_jobs": len(bundles),
-        "estimated_cpu_hours": sum(t * n for t, n in costs) / 3600,
-        "estimated_additional_artifact_bytes": additional_artifact_bytes
-        if not missing_artifact_cases
-        else None,
-        "artifact_estimate_status": "unavailable" if missing_artifact_cases else "available",
-        "artifact_estimate_missing_cases": sorted(missing_artifact_cases),
-        "estimated_elapsed_seconds": {"lower": seconds / capacity, "upper": seconds},
-        "cache_saved_observations": len(savings),
-        "cache_saved_worker_seconds": sum(savings),
-        "profiles": list(profiles.values()),
-        "inventory": resources,
-        "assumptions": [
-            "baseline-derived estimates apply to both arms",
-            "queue wait excluded",
-            "conservative common-profile concurrency; heterogeneous token scheduling may improve it",
-            "artifact sizes use each case's maximum persisted baseline preflight/pilot bytes, "
-            "including compression, as the size assumption for both arms and future seeds",
-            "new baseline artifacts retain three copies (attempt, result, cache); evolve retains "
-            "two (attempt, result); cached baseline adds one result copy",
-            "artifact storage excludes existing files, logs, build workspaces, receipt/manifest "
-            "metadata, filesystem allocation overhead, and failed or retried attempts",
-        ],
-    }
+        bundles.append({"schema_version": 1, "bundle_id": canonical_hash(job), **job})
+    return bundles

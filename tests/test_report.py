@@ -106,3 +106,39 @@ def test_live_status_record_has_readable_status_and_preserves_execution_metadata
     )
     assert report["status"] == "NEEDS_RECONCILIATION"
     assert report["execution"]["affected"] == ["job-1"]
+
+
+def test_evolve_failure_is_reported_against_evolve_and_never_dropped():
+    from benchpress_compare.report import render_markdown
+
+    plan, observations = fixture()
+    observations[1].update(status="COMPILER_FAILED", reason="native_crash", N2=None, D2=None)
+    report = build_report(plan, observations, status="COMPLETE_WITH_FAILURES")
+    assert report["failures"]["by_arm"] == {"baseline": {}, "evolve": {"COMPILER_FAILED": 1}}
+    assert [row["input_id"] for row in report["failures"]["evolve_only"]] == ["Q/circuit"]
+    assert report["summary"]["metrics"]["N2"]["score"] is None
+    assert report["summary"]["metrics"]["N2"]["circuit_counts"]["unclassifiable"] == 1
+    partial = report["score_without_evolve_failures"]
+    assert partial["excluded_inputs"] == ["Q/circuit"]
+    assert partial["evolve_failed_observations"] == 1
+    assert partial["metrics"]["N2"]["score"] is None  # nothing is left in this one-circuit plan
+    markdown = render_markdown(report)
+    assert "Evolve failed where baseline succeeded: 1 observations" in markdown
+    assert "Score without evolve-failed circuits (PARTIAL: leaves out 1 circuits" in markdown
+
+
+def test_score_without_evolve_failures_covers_the_remaining_circuits():
+    plan, observations = fixture()
+    other = dict(plan["cases"][0], case_id="d", input_id="Q/other")
+    plan["cases"].append(other)
+    observations += [
+        dict(row, observation_id=row["arm"] + "-d", case_id="d", N2=20, D2=20)
+        for row in observations
+    ]
+    observations[1].update(status="COMPILER_FAILED", N2=None, D2=None)
+    report = build_report(plan, observations)
+    partial = report["score_without_evolve_failures"]
+    assert report["summary"]["metrics"]["N2"]["score"] is None
+    assert partial["excluded_inputs"] == ["Q/circuit"]
+    assert partial["excluded_weight"] == {"numerator": 1, "denominator": 8}
+    assert partial["metrics"]["N2"]["score"] == 1

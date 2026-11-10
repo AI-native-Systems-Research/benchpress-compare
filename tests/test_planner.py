@@ -1,8 +1,9 @@
 import pytest
 
+from benchpress_compare.corpus import load_catalogue
 from benchpress_compare.errors import PreparationError
-from benchpress_compare.pilot import estimate, pilot_selection, worker_capacity
-from benchpress_compare.planner import pack, recommendations
+from benchpress_compare.pilot import worker_capacity
+from benchpress_compare.planner import BIG_CIRCUITS, shard_bundles
 
 
 def test_zero_capacity_and_override():
@@ -15,108 +16,50 @@ def test_zero_capacity_and_override():
         worker_capacity(resources, profile, 8, workers="3")
 
 
-def test_packing_splits_preserving_pairs_and_cache():
-    specs = [
+def test_big_circuits_are_catalogue_inputs():
+    ids = {row["input_id"] for row in load_catalogue()["candidates"]}
+    assert set(BIG_CIRCUITS) <= ids
+
+
+def specs(input_id, cases, *, wall=100):
+    return [
         {
-            "case_id": "c",
-            "observation_id": f"o{s}",
-            "seed": s,
+            "case_id": f"{input_id}#{case}",
+            "input_id": input_id,
+            "observation_id": f"{input_id}#{case}/{arm}/{seed}",
+            "seed": seed,
             "arm": arm,
-            "runtime_profile": {"native_threads": 1},
+            "runtime_profile": {"native_threads": 1, "wall_seconds": wall},
         }
-        for s in range(3)
+        for case in range(cases)
+        for seed in range(3)
         for arm in ("baseline", "evolve")
     ]
-    estimates = {"c": {"estimated_seconds": 10}}
-    jobs = pack(specs, estimates, wall_limit=36)
-    assert len(jobs) == 3
-    assert all(len(job["observations"]) == 2 for job in jobs)
-    cached = pack(specs, estimates, wall_limit=36, completed={("baseline", "o0")})
-    assert sum(len(job["observations"]) for job in cached) == 5
-    with pytest.raises(PreparationError, match="cannot fit"):
-        pack(specs, estimates, wall_limit=15)
 
 
-def test_pilot_includes_expensive_and_each_stratum():
-    cases = [
-        {
-            "case_id": str(i),
-            "input_id": name,
-            "family": "F1",
-            "band": "S",
-            "target_class": "square",
-            "level": 2,
-        }
-        for i, name in enumerate(("ordinary", "also", "Q/medium/factor247_n15"))
-    ]
-    assert [case["case_id"] for case in pilot_selection(cases)] == ["0", "2"]
+def test_each_big_case_seed_is_its_own_paired_job_and_small_work_is_chunked():
+    big = specs("Q/large/bwt_n37", 6)
+    small = specs("Q/small/ordinary", 5)
+    bundles = shard_bundles(big + small, max_observations=24, job_wall_seconds=10_000)
+    big_jobs = [b for b in bundles if b["observations"][0]["input_id"] in BIG_CIRCUITS]
+    assert len(big_jobs) == 6 * 3
+    for job in big_jobs:
+        rows = job["observations"]
+        assert len({(row["case_id"], row["seed"]) for row in rows}) == 1
+        assert sorted(row["arm"] for row in rows) == ["baseline", "evolve"]
+    small_jobs = [b for b in bundles if b not in big_jobs]
+    assert [len(b["observations"]) for b in small_jobs] == [24, 6]
+    assert sum(len(b["observations"]) for b in bundles) == len(big + small)
+    assert small_jobs[0]["estimated_seconds"] == 10 + 24 * 100
 
 
-def resource_sample(size, *, arm="baseline", phase="preflight"):
-    return {
-        "case_id": "c",
-        "status": "SUCCEEDED",
-        "arm": arm,
-        "phase": phase,
-        "resources": {
-            "elapsed_seconds": 1,
-            "peak_rss_bytes": 1024,
-            "persisted_artifact_bytes": size,
-        },
-    }
+def test_job_wall_limit_bounds_small_shards():
+    bundles = shard_bundles(specs("Q/small/ordinary", 1), max_observations=24, job_wall_seconds=310)
+    assert [len(b["observations"]) for b in bundles] == [3, 3]
 
 
-def test_artifact_estimate_uses_maximum_baseline_preflight_and_pilot_size():
-    observed = estimate(
-        [{"case_id": "c"}],
-        [resource_sample(100), resource_sample(150, phase="pilot"), resource_sample(999, arm="evolve")],
-    )["cases"]["c"]
-    assert observed["artifact_size_status"] == "available"
-    assert observed["artifact_size_sample_count"] == 2
-    assert observed["observed_max_artifact_bytes"] == 150
-
-
-@pytest.mark.parametrize("missing", [None, -1, True])
-def test_missing_or_invalid_artifact_telemetry_is_explicitly_unavailable(missing):
-    observed = estimate(
-        [{"case_id": "c"}], [resource_sample(100), resource_sample(missing)]
-    )["cases"]["c"]
-    assert observed["artifact_size_status"] == "unavailable"
-    assert observed["artifact_size_sample_count"] == 1
-    assert observed["observed_max_artifact_bytes"] is None
-
-
-@pytest.mark.parametrize("artifact_bytes", [100, None])
-def test_disk_forecast_counts_retained_copies_and_reports_missing_evidence(artifact_bytes):
-    specs = [
-        {
-            "case_id": "c",
-            "observation_id": f"o{seed}",
-            "arm": arm,
-            "runtime_profile": {"native_threads": 1, "memory_bytes": 20},
-        }
-        for seed in range(2)
-        for arm in ("baseline", "evolve")
-    ]
-    estimates = {
-        "c": {
-            "estimated_seconds": 10,
-            "observed_max_artifact_bytes": artifact_bytes,
-            "artifact_size_status": "available" if artifact_bytes is not None else "unavailable",
-        }
-    }
-    recommendation = recommendations(
-        specs, estimates, [], {"usable_cpus": 4, "worker_memory_budget_bytes": 100},
-        cached_baseline_ids=["o0"],
-    )
-    assert recommendation["cache_saved_observations"] == 1
-    if artifact_bytes is None:
-        assert recommendation["estimated_additional_artifact_bytes"] is None
-        assert recommendation["artifact_estimate_status"] == "unavailable"
-        assert recommendation["artifact_estimate_missing_cases"] == ["c"]
-    else:
-        # One cached baseline result, one new baseline with three copies,
-        # and two evolved observations with two copies each.
-        assert recommendation["estimated_additional_artifact_bytes"] == 800
-        assert recommendation["artifact_estimate_status"] == "available"
-        assert recommendation["artifact_estimate_missing_cases"] == []
+def test_jobs_never_mix_profiles():
+    rows = specs("Q/large/bwt_n37", 1)
+    rows[0] = dict(rows[0], runtime_profile={"native_threads": 2, "wall_seconds": 100})
+    with pytest.raises(PreparationError, match="mix"):
+        shard_bundles(rows, max_observations=24, job_wall_seconds=10_000)

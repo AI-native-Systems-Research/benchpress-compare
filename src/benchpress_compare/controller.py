@@ -48,7 +48,6 @@ def submit_controller(config: RunConfig, *, prepare_only=False, retry_cancelled=
         options = {
             "prepare_only": prepare_only,
             "retry_cancelled": retry_cancelled,
-            "accept_unresolved": config.accept_unresolved,
         }
         if path.exists():
             previous = read_json(path)
@@ -96,10 +95,7 @@ def submit_controller(config: RunConfig, *, prepare_only=False, retry_cancelled=
                 )
         else:
             saved = RunConfig(**read_json(request_path)["config"])
-            saved_values, requested_values = saved.to_dict(), config.to_dict()
-            if config.accept_unresolved:
-                saved_values["accept_unresolved"] = True
-            if saved_values != requested_values:
+            if saved.to_dict() != config.to_dict():
                 raise CompareError("LSF continuation must use its saved configuration")
             if "coordinator_hash" not in request:
                 with lease.fenced():
@@ -128,8 +124,6 @@ def submit_controller(config: RunConfig, *, prepare_only=False, retry_cancelled=
             command.append("--prepare-only")
         if retry_cancelled:
             command.append("--retry-cancelled")
-        if config.accept_unresolved:
-            command.append("--accept-unresolved")
         intent = {
             "schema_version": 1,
             "status": "SUBMITTING",

@@ -1,27 +1,16 @@
-"""Baseline-only admission, explicit uncertainty, and canonical deduplication."""
+"""Post-collection, baseline-only admission and canonical deduplication."""
 
 from __future__ import annotations
 
 from collections import defaultdict
-from statistics import median
 from typing import Iterable
 
-from .weights import LEVELS, TARGETS
 from .validation import REQUIRED_CHECKS
+from .weights import WeightError, assign_case_weights, audit_case_weights
 
-ADMISSION_POLICY = "baseline-three-seed-six-configuration-v1"
+ADMISSION_POLICY = "post-collection-baseline-success-v2"
 REQUIRED_VALIDATION_CHECKS = frozenset(REQUIRED_CHECKS)
 _SUCCESS = {"SUCCEEDED", "SUCCESS", "COMPLETE"}
-
-
-def _diagnostic(result: dict, key: str):
-    if key in result:
-        return result[key]
-    for section in ("diagnostics", "routing", "passes"):
-        data = result.get(section, {})
-        if isinstance(data, dict) and key in data:
-            return data[key]
-    return None
 
 
 def _validation_verified(result: dict) -> bool:
@@ -53,221 +42,112 @@ def _validation_verified(result: dict) -> bool:
     return True
 
 
-def evaluate_configuration(observations: Iterable[dict], *, seeds: list[int] | None = None) -> dict:
-    """Assess exactly three independent baseline preflight observations."""
-    observations = list(observations)
-    reasons: list[str] = []
-    if any(item.get("arm") != "baseline" for item in observations):
-        raise ValueError("evolve evidence is forbidden in admission")
-    if any(item.get("phase") != "preflight" for item in observations):
-        raise ValueError("only preflight evidence is eligible for admission")
-    actual_seeds = [item.get("seed") for item in observations]
-    if len(observations) != 3 or len(set(actual_seeds)) != 3:
-        reasons.append("missing_or_duplicate_preflight_seeds")
-    if seeds is not None:
-        if len(seeds) != 3 or len(set(seeds)) != 3:
-            raise ValueError("configuration requires exactly three distinct planned seeds")
-        if set(actual_seeds) != set(seeds):
-            reasons.append("preflight_seed_identity_mismatch")
-    inserted = []
-    sabre = []
-    evidence = []
-    for item in observations:
-        evidence.append(
-            {
-                "observation_id": item.get("observation_id"),
-                "seed": item.get("seed"),
-                "result_hash": item.get("result_hash"),
-            }
-        )
-        if str(item.get("status", "")).upper() not in _SUCCESS:
-            reasons.append("preflight_" + str(item.get("status", "missing_status")).lower())
-        if not _validation_verified(item):
-            reasons.append("validation_unverified")
-        for metric in ("N2", "D2"):
-            value = item.get(metric, item.get("metrics", {}).get(metric))
-            if isinstance(value, dict):
-                value = value.get("value")
-            if type(value) is not int or value < 0:
-                reasons.append(f"{metric}_unavailable")
-        executed = _diagnostic(item, "sabre_executed")
-        if type(executed) is not bool:
-            reasons.append("missing_sabre_instrumentation")
-        sabre.append(executed)
-        count = _diagnostic(item, "inserted_swaps")
-        if type(count) is not int or count < 0:
-            reasons.append("missing_inserted_swap_evidence")
-        else:
-            inserted.append(count)
-    if reasons:
-        status = "unresolved"
-    else:
-        if not all(sabre):
-            reasons.append("sabre_bypassed")
-        if median(inserted) < 10:
-            reasons.append("inserted_swap_median_below_10")
-        status = "ineligible" if reasons else "qualifying"
-    return {
-        "schema_version": 1,
-        "status": status,
-        "reasons": sorted(set(reasons)),
-        "seeds": seeds if seeds is not None else actual_seeds,
-        "sabre_executed": sabre,
-        "inserted_swaps": inserted,
-        "median_inserted_swaps": median(inserted) if len(inserted) == 3 else None,
-        "evidence": evidence,
-    }
+def admit(cases: Iterable[dict], observations: Iterable[dict]) -> dict:
+    """Decide which inputs are scored, from comparison baseline results only.
 
-
-def evaluate_input(
-    input_id: str,
-    observations: Iterable[dict],
-    *,
-    embedding: dict | None = None,
-    expected_cases: Iterable[dict] | None = None,
-) -> dict:
-    observations = list(observations)
-    if any(item.get("input_id", input_id) != input_id for item in observations):
-        raise ValueError("observation input identity mismatch")
-    expected = (
-        list(expected_cases)
-        if expected_cases is not None
-        else [{"target_class": target, "level": level} for target in TARGETS for level in LEVELS]
-    )
-    configs = [(case["target_class"], case["level"]) for case in expected]
-    if sorted(configs) != sorted((target, level) for target in TARGETS for level in LEVELS):
-        raise ValueError("admission requires exactly six standard configurations")
-    by_case = {case["case_id"]: case for case in expected if "case_id" in case}
-    grouped = defaultdict(list)
-    for item in observations:
-        case = by_case.get(item.get("case_id"), item)
-        configuration = (case.get("target_class"), case.get("level"))
-        if configuration not in configs:
-            raise ValueError(f"unexpected preflight configuration: {configuration}")
-        grouped[configuration].append(item)
-    records = []
-    for case in expected:
-        result = evaluate_configuration(
-            grouped[case["target_class"], case["level"]],
-            seeds=case.get("preflight_seeds", case.get("seeds")),
-        )
-        records.append(
-            {
-                "case_id": case.get("case_id"),
-                "target_class": case["target_class"],
-                "level": case["level"],
-                **result,
-            }
-        )
-    embedding = dict(
-        embedding or {"status": "unknown", "reason": "no_verified_embedding_certificate"}
-    )
-    if (
-        embedding.get("status") in {"verified", "verified_zero_routing"}
-        and embedding.get("zero_routing", True) is True
-    ):
-        if not embedding.get("evidence"):
-            raise ValueError("verified zero-routing embedding requires evidence")
-        status, reasons = "ineligible", ["verified_zero_routing_embedding"]
-    elif any(record["status"] == "unresolved" for record in records):
-        status, reasons = "unresolved", ["unresolved_configuration"]
-    elif any(record["status"] == "ineligible" for record in records):
-        status, reasons = "ineligible", ["nonqualifying_configuration"]
-    else:
-        status, reasons = "admitted", []
-    return {
-        "schema_version": 1,
-        "policy": ADMISSION_POLICY,
-        "input_id": input_id,
-        "status": status,
-        "reasons": reasons,
-        "embedding": embedding,
-        "configurations": records,
-        "qualifying_configurations": [
-            {"target_class": record["target_class"], "level": record["level"]}
-            for record in records
-            if record["status"] == "qualifying"
-        ],
-    }
-
-
-def resolve_candidates(
-    candidates: Iterable[dict],
-    eligibility: Iterable[dict],
-    *,
-    structural_groups: Iterable[dict] = (),
-    accept_unresolved: bool = False,
-) -> dict:
-    """Select verified structural representatives using a predeclared priority.
-
-    Structural group records contain ``status='verified'``, ``members`` and an
-    ordered ``priority`` listing every member, plus ``evidence``. Unverified
-    suspected groups block normal freeze rather than silently double-weighting.
+    An input is dropped when any planned baseline observation of any of its
+    cases did not succeed or is missing. Evolve results are never read here, so
+    an evolve failure keeps its input in the score, where it counts against
+    evolve. Declared structural variants share one weight: the first of
+    ``[canonical, *sorted(variants)]`` whose baseline succeeded is scored.
     """
-    candidates = list(candidates)
-    candidate_ids = [item["input_id"] for item in candidates]
-    if len(set(candidate_ids)) != len(candidate_ids):
-        raise ValueError("duplicate candidate identity")
-    records = {}
-    for record in eligibility:
-        key = record["input_id"]
-        if key in records or key not in candidate_ids:
-            raise ValueError(f"unexpected or duplicate eligibility record: {key}")
-        records[key] = dict(record)
-    for key in candidate_ids:
-        if key not in records:
-            records[key] = {
-                "schema_version": 1,
-                "input_id": key,
-                "status": "unresolved",
-                "reasons": ["missing_eligibility"],
-            }
-    assigned: set[str] = set()
-    for group in structural_groups:
-        members = list(group["members"])
-        priority = list(group["priority"])
-        if (
-            set(priority) != set(members)
-            or len(priority) != len(members)
-            or len(set(members)) != len(members)
-        ):
-            raise ValueError("structural priority must list every group member exactly once")
-        if set(members) - set(candidate_ids) or assigned & set(members):
-            raise ValueError("unknown or overlapping structural group members")
-        assigned.update(members)
-        if group.get("status") != "verified" or not group.get("evidence"):
-            for key in members:
-                records[key] = {
-                    **records[key],
-                    "status": "unresolved",
-                    "reasons": ["unresolved_structural_equivalence"],
+    cases = list(cases)
+    baseline = {
+        (item["case_id"], item["seed"]): item
+        for item in observations
+        if item.get("arm") == "baseline" and item.get("phase", "comparison") == "comparison"
+    }
+    failures: dict[str, list[dict]] = defaultdict(list)
+    canonicals: dict[str, str | None] = {}
+    for case in cases:
+        canonicals[case["input_id"]] = case.get("structural_canonical")
+        for seed in case["seeds"]:
+            item = baseline.get((case["case_id"], seed))
+            if item is None:
+                status, reason = "MISSING", "no_committed_result"
+            elif str(item.get("status", "")).upper() in _SUCCESS and _validation_verified(item):
+                continue
+            else:
+                status, reason = item.get("status"), item.get("reason")
+            failures[case["input_id"]].append(
+                {
+                    "case_id": case["case_id"],
+                    "target_class": case["target_class"],
+                    "level": case["level"],
+                    "seed": seed,
+                    "status": status,
+                    "reason": reason,
                 }
-            continue
+            )
+    records = {}
+    for key in sorted(canonicals):
+        problems = failures.get(key, [])
+        records[key] = {
+            "input_id": key,
+            "status": "dropped" if problems else "admitted",
+            "reasons": sorted(
+                {
+                    "baseline_missing" if row["status"] == "MISSING" else "baseline_failed"
+                    for row in problems
+                }
+            ),
+            "baseline_failures": problems,
+        }
+    groups: dict[str, list[str]] = defaultdict(list)
+    for key, canonical in canonicals.items():
+        if canonical:
+            groups[canonical].append(key)
+    for canonical, variants in sorted(groups.items()):
+        priority = ([canonical] if canonical in records else []) + sorted(variants)
         representative = next(
             (key for key in priority if records[key]["status"] == "admitted"), None
         )
-        for key in members:
+        for key in priority:
             if key == representative:
-                records[key]["verified_structural_group"] = group.get(
-                    "group_id", "|".join(priority)
-                )
+                records[key]["structural_group"] = "|".join(priority)
             elif records[key]["status"] == "admitted":
-                records[key] = {
-                    **records[key],
-                    "status": "ineligible",
-                    "reasons": ["structural_duplicate"],
-                    "representative": representative,
-                }
-    unresolved = sorted(key for key, record in records.items() if record["status"] == "unresolved")
-    admitted = sorted(key for key, record in records.items() if record["status"] == "admitted")
+                records[key].update(
+                    status="dropped",
+                    reasons=["structural_duplicate"],
+                    representative=representative,
+                )
     return {
         "schema_version": 1,
         "policy": ADMISSION_POLICY,
-        "candidate_count": len(candidates),
-        "admitted": admitted,
-        "unresolved": unresolved,
-        "freeze_allowed": not unresolved or accept_unresolved,
-        "conditional_on_unresolved": bool(unresolved and accept_unresolved),
-        "requires_preparation_revision": bool(unresolved and accept_unresolved),
+        "candidate_count": len(records),
+        "admitted": sorted(key for key, row in records.items() if row["status"] == "admitted"),
+        "dropped": sorted(key for key, row in records.items() if row["status"] == "dropped"),
         "records": [records[key] for key in sorted(records)],
     }
+
+
+def apply_admission(plan: dict, observations: Iterable[dict]) -> dict:
+    """Return the plan with post-collection admission and exact case weights.
+
+    Dropped inputs stay in the report as zero-weight supplemental cases. If
+    the admitted inputs cannot satisfy the design (for example an empty family
+    in the eight-family design), every case gets zero weight and the reason is
+    recorded, so the report shows no score instead of a redistributed one.
+    """
+    observations = list(observations)
+    admission = admit(plan["cases"], observations)
+    records = {row["input_id"]: row for row in admission["records"]}
+    cases = []
+    for case in plan["cases"]:
+        record = records[case["input_id"]]
+        case = dict(case, supplemental=record["status"] != "admitted")
+        if "structural_group" in record:
+            case["verified_structural_group"] = record["structural_group"]
+        cases.append(case)
+    config = plan.get("config", {})
+    require_all = not (config.get("smoke") or config.get("allow_missing_families"))
+    try:
+        cases = assign_case_weights(cases, require_all_families=require_all)
+        audit = audit_case_weights(cases, require_all_families=require_all)
+        admission["weights_error"] = None
+    except WeightError as exc:
+        zero = {"numerator": 0, "denominator": 1}
+        cases = [dict(case, weight=zero, sensitivity_weight=zero) for case in cases]
+        audit = None
+        admission["weights_error"] = str(exc)
+    return {**plan, "cases": cases, "admission": admission, "weights_audit": audit}

@@ -1,8 +1,7 @@
 # Benchpress Compare
 
 `benchpress-compare` prepares reproducible comparisons of two Qiskit source trees.
-It records release builds, frozen fixtures and targets, baseline admission,
-matched seeds, observations, and independent native two-qubit count (N2) and
+It records release builds, frozen fixtures and targets, matched seeds, observations, and independent native two-qubit count (N2) and
 two-qubit depth (D2) reports. The coordinator and offline reports do not import
 Qiskit; each measurement uses the selected build's isolated worker environment.
 
@@ -11,7 +10,7 @@ execution adapters, durable storage, scientific calculations, reports, and tests
 The frozen validation contract (`target-legality-v4`) requires verified native
 target legality for every accepted observation. Layout validation, routing replay,
 and semantic equivalence checks are not performed. SABRE activity and native-boundary
-SWAP count deltas remain admission diagnostics under `sabre-native-counts-v3`.
+SWAP count deltas remain report diagnostics under `sabre-native-counts-v3`.
 Accepted results establish target compatibility, not behavioral equivalence with
 the input circuit.
 See
@@ -53,7 +52,7 @@ arms; the arms still execute independent observations.
 Provide a local Benchpress mirror at revision
 `4c04b38a53fc231a89f1a6bc9541c1b641ed6dcf`. The checked-in
 [catalogue](data/candidates.json) pins the input assets and includes 138 main-table
-candidates, 11 additional screening candidates, aliases, and separate coverage.
+candidates, 11 additional candidates, aliases, and separate coverage.
 
 ```bash
 uv run benchpress-compare prepare \
@@ -68,17 +67,24 @@ uv run benchpress-compare run --results-root /benchmarks/results/change-001
 ```
 
 `run` with all four paths prepares and collects in one invocation. `prepare`
-stops at final plan publication when admission, pilot, and freeze gates pass.
-Target legality must pass before a normal full-corpus freeze;
-diagnostic preparation artifacts remain available for failures. `--accept-unresolved` records
-an explicit conditional cohort decision, but does not make unsupported validation
-pass or create missing families. A smoke subset selected by repeated
+builds both arms, freezes fixtures and targets, checks that both builds import
+them, and publishes `plan.json`: every candidate on all six target/level
+configurations, every seed, both arms. Nothing is measured before the plan is
+frozen.
+
+After collection, the report admits inputs from baseline results only. An input
+is dropped when any of its baseline observations failed or is missing; of
+declared structural variants only the first with a successful baseline is
+scored. Dropped inputs keep zero weight and are listed with their reasons. An
+evolve failure where baseline succeeded is never dropped: it makes the main
+score unavailable and is listed under Failures, next to a clearly labelled
+partial score over the remaining circuits. A smoke subset selected by repeated
 `--smoke INPUT_ID` arguments is labelled separately and cannot claim the standard
 eight-family score.
 
 Use `--native-threads`, `--cpu-budget`, `--memory-gb`, `--worker-memory-gb`,
 `--wall-seconds`, `--build-cpus`, and `--workers` to set local budgets. If a
-family has no admitted input, the standard eight-family design cannot freeze;
+family has no admitted input, the standard eight-family design has no score;
 `--allow-missing-families` selects the explicitly named reduced design instead
 of redistributing weight. Both arms use the same
 frozen observation profile. A zero-capacity allocation is an error. Successful
@@ -139,8 +145,10 @@ claim or a regression pass/fail threshold.
 Copy [site.example.toml](docs/site.example.toml), set the queue and site memory
 semantics (`LSF_UNIT_FOR_LIMITS` decides whether `-M`/`rusage[mem=]` are MB or
 GB), and keep the package, sources/snapshots, store, and results on storage
-visible to workers. Preparation tasks and preflight observations are sharded
-into sequential jobs; comparison jobs are packed to `target_job_seconds`. The
+visible to workers. Each seed of each case of the inputs in `BIG_CIRCUITS`
+(`planner.py`) runs as its own job with both arms; all other observations and
+fixture tasks are sharded in plan order into sequential jobs of at most
+`shard_max_observations`. The
 controller polls its jobs with one `bjobs` listing per cycle and falls back to
 `bhist -l` text history, matched by unique job name. Use an execution-platform coordinator environment; a macOS
 wheel cannot run on Linux workers.
@@ -195,6 +203,5 @@ The adapted Summit fixture recipes retain Benchpress provenance and its
 [Apache 2.0 license](data/LICENSE-BENCHPRESS.txt), also included in the package.
 
 Outstanding gates are verification against the actual supplied source versions, real-site LSF
-and shared-filesystem checks, full baseline admission/pilot, and a real frozen
-cohort A/A rehearsal with independent evolve observations. Test success alone is
+and shared-filesystem checks, and a real A/A rehearsal with independent evolve observations. Test success alone is
 not evidence that those gates passed.

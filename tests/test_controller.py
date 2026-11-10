@@ -97,17 +97,6 @@ def test_known_terminal_controller_need_not_remain_in_scheduler_history(launch):
     assert len(scheduler.submitted) == 2
 
 
-def test_continuation_forwards_explicit_unresolved_decision(launch):
-    root, config, scheduler = launch
-    config.accept_unresolved = True
-    submit_controller(config)
-    assert "--accept-unresolved" in scheduler.submitted[0]
-    assert read_json(root / "request.json")["config"]["accept_unresolved"] is False
-    assert (
-        read_json(root / "jobs/controller.json")["controller_options"]["accept_unresolved"] is True
-    )
-
-
 def test_active_controller_actions_cannot_be_silently_changed(launch):
     _, config, scheduler = launch
     submit_controller(config, prepare_only=True)

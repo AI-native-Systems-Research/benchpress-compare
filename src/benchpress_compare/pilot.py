@@ -1,4 +1,4 @@
-"""Baseline-only resource estimates and explicit observation resource tiers."""
+"""Local resource inventory, worker capacity and observation runtime profiles."""
 
 from __future__ import annotations
 
@@ -12,17 +12,6 @@ import psutil
 from .errors import PreparationError
 
 GIB = 1024**3
-MEMORY_TIERS_GB = (1, 2, 4, 8, 16, 32, 64, 128, 256, 512)
-WALL_TIERS_SECONDS = (60, 300, 900, 3600, 14400, 43200, 86400, 172800)
-EXPENSIVE = (
-    "bwt_",
-    "factor247",
-    "square_root_n60",
-    "hwb11",
-    "hwb12",
-    "vqe_uccsd_n28",
-    "ham_ham_JW24",
-)
 
 
 def _read_limit(path: Path):
@@ -122,78 +111,4 @@ def runtime_profile(*, native_threads=1, wall_seconds=3600, memory_gb=8, machine
             "NUMEXPR_NUM_THREADS": str(native_threads),
             "QISKIT_PARALLEL": "FALSE",
         },
-    }
-
-
-def pilot_selection(cases: list[dict]) -> list[dict]:
-    chosen = {}
-    strata = {}
-    for case in sorted(cases, key=lambda item: item["case_id"]):
-        key = (case["family"], case["band"], case["target_class"], case["level"])
-        strata.setdefault(key, case)
-        if any(name in case["input_id"] for name in EXPENSIVE):
-            chosen[case["case_id"]] = case
-    chosen.update({case["case_id"]: case for case in strata.values()})
-    return [chosen[key] for key in sorted(chosen)]
-
-
-def estimate(
-    cases: list[dict],
-    observations: list[dict],
-    *,
-    native_threads=1,
-    max_wall_seconds=172800,
-    max_memory_gb=512,
-) -> dict:
-    estimates = {}
-    for case in cases:
-        samples = [
-            row
-            for row in observations
-            if row["case_id"] == case["case_id"]
-            and row.get("status") == "SUCCEEDED"
-            and row.get("arm") == "baseline"
-        ]
-        if not samples:
-            raise PreparationError(f"No successful baseline resource evidence: {case['case_id']}")
-        times = [float(row.get("resources", {}).get("elapsed_seconds", 0)) for row in samples]
-        memory = [int(row.get("resources", {}).get("peak_rss_bytes", 0)) for row in samples]
-        if min(times) <= 0 or min(memory) <= 0:
-            raise PreparationError(f"Incomplete resource telemetry: {case['case_id']}")
-        required_time, required_memory = 2 * max(times) + 10, math.ceil(1.5 * max(memory))
-        wall = next((v for v in WALL_TIERS_SECONDS if v >= required_time), None)
-        mem = next((v for v in MEMORY_TIERS_GB if v * GIB >= required_memory), None)
-        if wall is None or mem is None or wall > max_wall_seconds or mem > max_memory_gb:
-            raise PreparationError(
-                f"Case {case['case_id']} needs at least {required_time:.1f}s "
-                f"and {required_memory} bytes; raise preparation ceilings"
-            )
-        artifact_sizes = [
-            row.get("resources", {}).get("persisted_artifact_bytes") for row in samples
-        ]
-        measured_artifact_sizes = [
-            size for size in artifact_sizes if type(size) is int and size >= 0
-        ]
-        artifact_sizes_complete = len(measured_artifact_sizes) == len(samples)
-        estimates[case["case_id"]] = {
-            "sample_count": len(samples),
-            "observed_max_seconds": max(times),
-            "observed_max_rss_bytes": max(memory),
-            "observed_max_artifact_bytes": max(measured_artifact_sizes)
-            if artifact_sizes_complete
-            else None,
-            "artifact_size_status": "available" if artifact_sizes_complete else "unavailable",
-            "artifact_size_sample_count": len(measured_artifact_sizes),
-            "estimated_seconds": required_time,
-            "extrapolated": False,
-            "runtime_profile": runtime_profile(
-                native_threads=native_threads, wall_seconds=wall, memory_gb=mem
-            ),
-        }
-    return {
-        "schema_version": 1,
-        "cases": estimates,
-        "memory_factor": 1.5,
-        "time_factor": 2,
-        "overhead_seconds": 10,
     }

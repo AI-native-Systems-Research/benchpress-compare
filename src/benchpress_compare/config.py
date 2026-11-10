@@ -50,7 +50,6 @@ class RunConfig:
     infrastructure_retries: int = 1
     lsf_config: str | None = None
     smoke: list[str] = field(default_factory=list)
-    accept_unresolved: bool = False
     allow_missing_families: bool = False
     design: str = "benchpress-eight-family-v1"
     schema_version: int = 1
@@ -128,11 +127,9 @@ class SiteConfig:
     poll_seconds: float = 10
     visibility_grace_seconds: float = 300
     job_wall_seconds: int = 86400
-    # Comparison jobs are packed to about this length so that a run spreads over
-    # many concurrent jobs; a single expensive case may still require more.
-    target_job_seconds: int = 7200
-    # Preparation shards (preflight, pilot, fixtures) hold at most this many
-    # sequential observations, also bounded by the job wall limit.
+    # Fixture and comparison shards hold at most this many sequential
+    # observations, also bounded by the job wall limit. Each seed of each case
+    # of a big circuit (planner.BIG_CIRCUITS) always gets a job of its own.
     shard_max_observations: int = 24
     memory_unit: str = "MB"
     memory_limit_unit: str | None = None

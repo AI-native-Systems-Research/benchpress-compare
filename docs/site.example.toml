@@ -13,10 +13,8 @@ max_memory_gb = 128
 poll_seconds = 10
 visibility_grace_seconds = 300
 job_wall_seconds = 86400
-# Comparison jobs are packed to about this many seconds of estimated work so a
-# run spreads across many jobs; preparation shards hold at most this many
-# sequential observations (also bounded by job_wall_seconds).
-target_job_seconds = 7200
+# Fixture and comparison jobs hold at most this many sequential observations
+# (also bounded by job_wall_seconds). Big circuits always get one job per seed.
 shard_max_observations = 24
 
 # Confirm both -M and rusage[mem=...] behavior against the site's LSF policy:

@@ -1,4 +1,4 @@
-"""Resumable baseline-only preparation and immutable scientific plan publication."""
+"""Resumable preparation (builds, fixtures, targets) and immutable plan publication."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ import urllib.request
 from .builds import snapshot_source, verify_snapshot
 from .config import RunConfig
 from .corpus import CORPUS_REVISION, load_catalogue, verify_corpus
-from .eligibility import evaluate_input, resolve_candidates
+from .eligibility import ADMISSION_POLICY
 from .errors import CompareError, IntegrityError, PreparationError, ReconciliationError
 from .identity import (
     atomic_write_json,
@@ -29,12 +29,11 @@ from .identity import (
     harness_identity,
 )
 from .orchestrator import ExecutionEngine, verify_plan
-from .pilot import estimate, pilot_selection, runtime_profile
-from .planner import observations_for, pack, recommendations
+from .pilot import runtime_profile
+from .planner import BIG_CIRCUITS, observations_for, shard_bundles
 from .schema import PROTOCOLS, TRANSPILE_CONTRACT, validate_record
 from .seeds import derive_seeds, seed_contract
 from .store import Lease, Store
-from .weights import WeightError, allocate_weights, assign_case_weights, audit_case_weights
 
 
 def _verify_harness_wheel(wheel):
@@ -343,58 +342,6 @@ def _check_paired_builds(builds):
         raise PreparationError("Paired builds have different installed dependency versions")
 
 
-def _structural_groups(candidates, cases, observations):
-    by_input = {}
-    for candidate in candidates:
-        canonical = candidate.get("structural_canonical")
-        if canonical:
-            by_input.setdefault(canonical, []).append(candidate["input_id"])
-    case_map = {case["case_id"]: case for case in cases}
-    signatures = {}
-    for result in observations:
-        case = case_map[result["case_id"]]
-        # Compare each stream position: seeds are independently derived per case.
-        index = case["seeds"].index(result["seed"])
-        key = (case["target_class"], case["level"], index)
-        signatures.setdefault(case["input_id"], {})[key] = result.get("diagnostics", {}).get(
-            "pre_layout_structure_hash"
-        )
-    ids = {row["input_id"] for row in candidates}
-    groups = []
-    for canonical, variants in sorted(by_input.items()):
-        members = [canonical, *sorted(variants)]
-        if canonical not in ids:
-            # Smoke selection cannot silently select only a variant without its canonical.
-            groups.append(
-                {
-                    "members": variants,
-                    "priority": variants,
-                    "status": "unresolved",
-                    "evidence": None,
-                }
-            )
-            continue
-        contexts = [signatures.get(member, {}) for member in members]
-        verified = all(
-            len(context) == 18 and all(context.values()) for context in contexts
-        ) and all(context == contexts[0] for context in contexts[1:])
-        groups.append(
-            {
-                "members": members,
-                "priority": members,
-                "status": "verified" if verified else "unresolved",
-                "evidence": {
-                    "context_hashes": {
-                        member: sorted(signatures.get(member, {}).values()) for member in members
-                    }
-                }
-                if verified
-                else None,
-            }
-        )
-    return groups
-
-
 def _checked_artifact(record, *, kind):
     """A cached task receipt must still identify the actual published artifact."""
     path = Path(record["path"])
@@ -403,33 +350,6 @@ def _checked_artifact(record, *, kind):
     }:
         raise IntegrityError(f"Frozen {kind} differs from its preparation receipt: {path}")
     return record
-
-
-def _revision_chain(root, parent_hash):
-    remaining = {}
-    for path in (root / "preparation/revisions").glob("*.json"):
-        revision = read_json(path)
-        if revision.get("schema_version") != 1 or canonical_hash(revision) != path.stem:
-            raise IntegrityError(f"Preparation revision identity mismatch: {path.name}")
-        remaining[path.stem] = revision
-    chain = []
-    while remaining:
-        children = [
-            (digest, revision)
-            for digest, revision in remaining.items()
-            if revision.get("parent_hash") == parent_hash
-        ]
-        if len(children) != 1:
-            raise IntegrityError(
-                "Preparation revisions fork or do not connect to the frozen contract"
-            )
-        digest, revision = children[0]
-        if revision.get("decision") != "accept-unresolved":
-            raise IntegrityError("Unsupported preparation decision")
-        chain.append({"revision_hash": digest, **revision})
-        del remaining[digest]
-        parent_hash = digest
-    return chain
 
 
 def _request_config(root, config, continue_existing):
@@ -463,7 +383,6 @@ def _request_config(root, config, continue_existing):
 def prepare(config: RunConfig, *, continue_existing=False, retry_cancelled=False):
     root = Path(config.results_root).resolve()
     root.mkdir(parents=True, exist_ok=True)
-    requested_accept_unresolved = config.accept_unresolved
     with Lease(root / "state/controller.lease") as lease:
         config = _request_config(root, config, continue_existing)
         if (root / "plan.json").exists():
@@ -545,6 +464,18 @@ def prepare(config: RunConfig, *, continue_existing=False, retry_cancelled=False
                     )
             cases = []
             contract_hash = canonical_hash(TRANSPILE_CONTRACT)
+            # One common profile for every case and both arms: nothing is
+            # measured before the comparison, so limits come from the request.
+            profile = runtime_profile(
+                native_threads=config.native_threads,
+                wall_seconds=config.wall_seconds,
+                memory_gb=config.worker_memory_gb,
+            )
+            structural = {
+                row["input_id"]: row["structural_canonical"]
+                for row in candidates
+                if row.get("structural_canonical")
+            }
             for fixture in fixtures:
                 from .targets import heavy_hex_distance
 
@@ -594,13 +525,14 @@ def prepare(config: RunConfig, *, continue_existing=False, retry_cancelled=False
                                 "active": fixture["active_width"] / target["num_qubits"],
                                 "declared": width / target["num_qubits"],
                             },
-                            "seeds": derive_seeds(case_id, "preflight", 3, config.master_seed),
-                            "runtime_profile": runtime_profile(
-                                native_threads=config.native_threads,
-                                wall_seconds=config.wall_seconds,
-                                memory_gb=config.worker_memory_gb,
+                            "seeds": derive_seeds(
+                                case_id, "comparison", config.seeds, config.master_seed
                             ),
+                            "runtime_profile": profile,
                         }
+                        canonical = structural.get(fixture["input_id"])
+                        if canonical:
+                            case["structural_canonical"] = canonical
                         validate_record("Case", case)
                         cases.append(case)
             contract = {
@@ -621,12 +553,8 @@ def prepare(config: RunConfig, *, continue_existing=False, retry_cancelled=False
                     "disclosed": [],
                     "target_legality": "recursive native target legality; "
                     "unsupported, mismatch or error invalidates the observation",
-                    "embedding": {
-                        "algorithm": "checked-cz-subgraph-v1",
-                        "budget_seconds": 1.0,
-                        "max_nodes": 100_000,
-                    },
                 },
+                "admission_policy": ADMISSION_POLICY,
             }
             prep_path = root / "preparation.json"
             if prep_path.exists():
@@ -634,187 +562,39 @@ def prepare(config: RunConfig, *, continue_existing=False, retry_cancelled=False
                     raise IntegrityError("Preparation contract changed on resume")
             else:
                 atomic_write_json(prep_path, contract)
-            engine.plan_hash = canonical_hash(contract)
-            revisions = _revision_chain(root, engine.plan_hash)
-            accepted_unresolved = (
-                requested_accept_unresolved
-                or config.accept_unresolved
-                or any(revision["decision"] == "accept-unresolved" for revision in revisions)
-            )
-            engine.state("SCREENING")
-            preflight_specs = observations_for(cases, builds, phase="preflight")
-            preflight = _execute(engine, preflight_specs)
-            records = []
-            for fixture in fixtures:
-                rows = [row for row in preflight if row["input_id"] == fixture["input_id"]]
-                contexts = [
-                    {
-                        "observation_id": row["observation_id"],
-                        "case_id": row["case_id"],
-                        "seed": row["seed"],
-                        "result": row.get("diagnostics", {}).get(
-                            "embedding",
-                            {"status": "unknown", "reason": "no_completed_embedding_search"},
-                        ),
-                    }
-                    for row in rows
-                ]
-                verified = [
-                    context["result"]
-                    for context in contexts
-                    if context["result"].get("status") == "verified"
-                    and context["result"].get("zero_routing") is True
-                    and context["result"].get("evidence")
-                ]
-                embedding = (
-                    {**verified[0], "contexts": contexts}
-                    if verified
-                    else {
-                        "status": "unknown",
-                        "reason": "no_verified_zero_routing_embedding",
-                        "contexts": contexts,
-                    }
+            # Every planned circuit is compared. Inputs are admitted to the
+            # score only after collection, from baseline results alone.
+            observations = observations_for(cases, builds)
+            bundles = (
+                shard_bundles(
+                    observations,
+                    max_observations=engine.site.shard_max_observations,
+                    job_wall_seconds=engine.site.job_wall_seconds,
                 )
-                records.append(
-                    evaluate_input(
-                        fixture["input_id"],
-                        rows,
-                        embedding=embedding,
-                        expected_cases=[
-                            case for case in cases if case["input_id"] == fixture["input_id"]
-                        ],
-                    )
-                )
-            coverage = resolve_candidates(
-                candidates,
-                records,
-                structural_groups=_structural_groups(candidates, cases, preflight),
-                accept_unresolved=accepted_unresolved,
-            )
-            coverage["known_local"] = catalogue["coverage"]
-            atomic_write_json(root / "coverage.json", coverage)
-            if (
-                accepted_unresolved
-                and coverage["unresolved"]
-                and not any(
-                    revision.get("unresolved") == coverage["unresolved"] for revision in revisions
-                )
-            ):
-                revision = {
-                    "schema_version": 1,
-                    "parent_hash": revisions[-1]["revision_hash"]
-                    if revisions
-                    else canonical_hash(contract),
-                    "decision": "accept-unresolved",
-                    "unresolved": coverage["unresolved"],
-                }
-                atomic_write_json(
-                    root / "preparation/revisions" / (canonical_hash(revision) + ".json"), revision
-                )
-                revisions.append({"revision_hash": canonical_hash(revision), **revision})
-            if not coverage["freeze_allowed"]:
-                raise PreparationError(
-                    f"{len(coverage['unresolved'])} candidates have unresolved mandatory evidence; see coverage.json"
-                )
-            admitted = [
-                fixture for fixture in fixtures if fixture["input_id"] in coverage["admitted"]
-            ]
-            if not admitted:
-                raise PreparationError(
-                    "No candidates passed all six configurations; no comparison plan published"
-                )
-            try:
-                weights = allocate_weights(admitted, require_all_families=config.complete_families_required)
-            except WeightError as exc:
-                raise PreparationError(str(exc)) from exc
-            admitted_cases = [
-                dict(
-                    case,
-                    seeds=derive_seeds(
-                        case["case_id"], "comparison", config.seeds, config.master_seed
-                    ),
-                )
-                for case in cases
-                if case["input_id"] in coverage["admitted"]
-            ]
-            admitted_cases = assign_case_weights(
-                admitted_cases, weights, require_all_families=config.complete_families_required
-            )
-            atomic_write_json(root / "weights.json", weights)
-            engine.state("PILOTING")
-            pilots = [
-                dict(case, seeds=derive_seeds(case["case_id"], "pilot", 1, config.master_seed))
-                for case in pilot_selection(admitted_cases)
-            ]
-            pilot_results = _execute(engine, observations_for(pilots, builds, phase="pilot"))
-            if any(row["status"] != "SUCCEEDED" for row in pilot_results):
-                raise PreparationError("A required resource pilot failed; no final plan published")
-            estimates = estimate(
-                admitted_cases,
-                preflight + pilot_results,
-                native_threads=config.native_threads,
-                max_wall_seconds=engine.site.job_wall_seconds
                 if engine.site
-                else config.wall_seconds,
-                max_memory_gb=config.worker_memory_gb,
-            )
-            profiles = {key: value["runtime_profile"] for key, value in estimates["cases"].items()}
-            for case in admitted_cases:
-                case["runtime_profile"] = profiles[case["case_id"]]
-            observations = observations_for(admitted_cases, builds, profiles=profiles)
-            if engine.site:
-                # Pack to the site's target job length so collection spreads over
-                # many concurrent jobs; one expensive case may still need longer.
-                largest = max(value["estimated_seconds"] for value in estimates["cases"].values())
-                wall_limit = min(
-                    engine.site.job_wall_seconds,
-                    max(engine.site.target_job_seconds, math.ceil(largest / 0.9) + 11),
-                )
-            else:
-                wall_limit = max(spec["runtime_profile"]["wall_seconds"] for spec in observations) * 12
-            bundles = pack(observations, estimates["cases"], wall_limit=wall_limit)
-            cached = [
-                spec["observation_id"]
-                for spec in observations
-                if spec["arm"] == "baseline"
-                and engine.store.get("baseline/observations", spec["observation_id"]) is not None
-            ]
-            estimates["recommendations"] = recommendations(
-                observations,
-                estimates["cases"],
-                bundles,
-                engine.resources,
-                workers=config.workers if engine.site is None else "auto",
-                max_jobs=engine.site.max_jobs if engine.site else None,
-                cached_baseline_ids=cached,
+                else []
             )
             plan = {
                 "schema_version": 1,
                 "design": config.design,
                 "config": config.to_dict(),
-                "cases": admitted_cases,
+                "cases": cases,
                 "coordinator_hash": harness_identity(),
                 "corpus": corpus_manifest,
                 "sources": snapshots,
                 "seed_algorithm": seed_contract(config.master_seed),
-                "runtime_profiles": profiles,
+                "runtime_profiles": {case["case_id"]: case["runtime_profile"] for case in cases},
                 "observations": observations,
                 "builds": builds,
-                "weights": weights,
-                "coverage": coverage,
-                "pilot": estimates,
+                "admission_policy": ADMISSION_POLICY,
+                "big_circuits": BIG_CIRCUITS,
                 "bundles": bundles,
                 "preparation_hash": canonical_hash(contract),
-                "preparation_revisions": [revision["revision_hash"] for revision in revisions],
-                "conditional_on_unresolved": coverage["conditional_on_unresolved"],
-                "weights_audit": audit_case_weights(
-                    admitted_cases, require_all_families=config.complete_families_required
-                ),
                 "expected_counts": {
                     "candidates": len(candidates),
-                    "preflight": len(preflight_specs),
-                    "cases": len(admitted_cases),
+                    "cases": len(cases),
                     "main_observations": len(observations),
+                    "jobs": len(bundles),
                 },
                 "protocols": PROTOCOLS,
                 "transpile_contract": TRANSPILE_CONTRACT,
@@ -824,9 +604,6 @@ def prepare(config: RunConfig, *, continue_existing=False, retry_cancelled=False
                 },
             }
             plan["artifact_hashes"]["preparation.json"] = file_hash(prep_path)
-            for revision in revisions:
-                relative = f"preparation/revisions/{revision['revision_hash']}.json"
-                plan["artifact_hashes"][relative] = file_hash(root / relative)
             plan["plan_hash"] = canonical_hash(plan)
             validate_record("RunPlan", plan)
             with lease.fenced():

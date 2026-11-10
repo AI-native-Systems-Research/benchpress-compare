@@ -718,9 +718,10 @@ def collect(root, *, retry_cancelled=False):
             else "COMPLETE_WITH_FAILURES"
         )
         engine.state(status)
+        from .eligibility import apply_admission
         from .report import build_report, write_report
 
-        write_report(root, build_report(plan, results, status=status))
+        write_report(root, build_report(apply_admission(plan, results), results, status=status))
         return status
 
 

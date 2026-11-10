@@ -34,8 +34,6 @@ TRANSPILE_CONTRACT = {
 class RunState(StrEnum):
     NEW = "NEW"
     PREPARING = "PREPARING"
-    SCREENING = "SCREENING"
-    PILOTING = "PILOTING"
     FROZEN = "FROZEN"
     RUNNING = "RUNNING"
     COMPLETE = "COMPLETE"
@@ -92,7 +90,7 @@ REQUIRED = {
     ],
     "Attempt": ["observation_id", "attempt_id", "submission_token", "status"],
     "ObservationResult": ["observation_id", "case_id", "arm", "seed", "status"],
-    "RunPlan": ["cases", "observations", "builds", "config", "weights", "pilot", "plan_hash"],
+    "RunPlan": ["cases", "observations", "builds", "config", "bundles", "plan_hash"],
 }
 
 
