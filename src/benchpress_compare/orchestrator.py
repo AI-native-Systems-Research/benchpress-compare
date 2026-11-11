@@ -24,8 +24,11 @@ from .store import Lease, Store, publish_bundle, verify_bundle
 # await validation and commit by the controller.
 SCHEDULER_TERMINAL = frozenset({"DONE", "EXIT", "INFRA_FAILED", "RESOURCE_LIMIT", "CANCELLED"})
 # Bounds the commits per controller iteration so a large batch of finished jobs
-# cannot hold off dispatch; the rest are committed on the next iteration.
-COLLECT_PER_ITERATION = 50
+# cannot hold off dispatch; the rest are committed on the next iteration. It must
+# stay above the observations one dispatch window can submit (about 18 shards of
+# up to 6 in 20 s), or finished work piles up in `active` faster than it is
+# committed and every later iteration grows longer.
+COLLECT_PER_ITERATION = 250
 
 
 def work_key(spec):
@@ -555,8 +558,13 @@ class ExecutionEngine:
                 for key, (spec, attempt) in list(active.items()):
                     token = attempt["job"]["token"]
                     job = dict(polled_jobs[token])
+                    # Persist only scheduler changes: finished work waiting past the
+                    # collection bound is otherwise rewritten every iteration, and a
+                    # few thousand such writes stall the loop for over a minute.
+                    changed = attempt.get("job") != job or attempt.get("status") != job["status"]
                     attempt.update(job=job, status=job["status"])
-                    self._save_attempt(attempt)
+                    if changed:
+                        self._save_attempt(attempt)
                     if job["status"] in {"NEEDS_RECONCILIATION", "SUBMISSION_UNKNOWN"}:
                         if job["status"] == "NEEDS_RECONCILIATION" or self.site is None:
                             uncertain.append(key)
