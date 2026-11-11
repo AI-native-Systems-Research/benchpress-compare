@@ -331,3 +331,30 @@ def test_png_rendering_uses_only_the_bundled_fonts():
     png = raster.render_png(svg, scale=1.0)
     assert png[:8] == b"\x89PNG\r\n\x1a\n"
     assert png == raster.render_png(svg, scale=1.0)
+
+
+def test_single_target_single_level_profiles_skip_redundant_slices():
+    """The evolve and small profiles use one target and one level: no repeated rows."""
+    from benchpress_compare.report import build_charts, render_markdown
+
+    plan, observations = multi_fixture()
+    plan["design"] = "benchpress-small-v1"
+    for index, case in enumerate(plan["cases"]):
+        case.update(target_class="heavy-hex", target_id="heavy-hex-9", band="SM"[index % 2])
+    report = build_report(plan, observations, status="COMPLETE")
+    markdown = render_markdown(report)
+    assert "no large-band inputs" in markdown
+    assert "### By optimization level" not in markdown
+    assert "### By target class" not in markdown
+    assert (
+        "Every case shares one optimization level (level 2) and one target class (heavy-hex)"
+        in markdown
+    )
+    assert "### By width band" in markdown and "### By family" in markdown
+    assert "| Family | S | M |" in markdown
+    assert "| Family | heavy-hex |" not in markdown
+    charts = build_charts(report)
+    assert set(charts) == {"slice_change", "circuit_outcomes", "largest_changes", "change_spread"}
+    assert "OPTIMIZATION LEVEL" not in charts["slice_change"]
+    assert "TARGET CLASS" not in charts["slice_change"]
+    assert "WIDTH BAND" in charts["slice_change"] and "CIRCUIT FAMILY" in charts["slice_change"]

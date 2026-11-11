@@ -217,7 +217,8 @@ def _slice_sections(report: dict) -> list[Section]:
     )
     for dimension, heading, order, label in dimensions:
         rows = group_rows(report, dimension, order)
-        if rows:
+        # A dimension with a single value (one target, one level) repeats the overall row.
+        if len(rows) > 1:
             items = [
                 Row(label(row["group"][dimension]), {m: _change(row, m) for m in METRICS})
                 for row in rows
@@ -461,7 +462,11 @@ def change_spread(report: dict) -> str | None:
         for value in series:
             tally[min(len(tally) - 1, math.floor(value / bin_w) - first)] += 1
         counts[metric] = tally
-    yticks = svg.count_ticks(max(max(tally) for tally in counts.values()))
+    peak = max(max(tally) for tally in counts.values())
+    yticks = svg.count_ticks(peak)
+    if len(yticks) > 1 and peak > 0.8 * yticks[-1]:
+        # Keep the tallest bar's count label clear of the panel title and overall marker.
+        yticks.append(yticks[-1] + (yticks[-1] - yticks[-2]))
     ylabel = svg.tick_formatter(yticks)
     left, right, plot_h, panel_gap = 64, WIDTH - PAD, 160, 56
     top = HEADER + 28

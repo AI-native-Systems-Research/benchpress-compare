@@ -399,6 +399,8 @@ def _pivot(view: _View, dimension: str, order, header: str) -> list[str]:
         return []
     families = ordered((row["group"]["family"] for row in rows), FAMILIES)
     columns = ordered((row["group"][dimension] for row in rows), order)
+    if len(columns) < 2:
+        return []  # a single column repeats the by-family table
     lookup = {(row["group"]["family"], row["group"][dimension]): row for row in rows}
     table = []
     for family in families:
@@ -429,15 +431,26 @@ def _slices(view: _View) -> list[str]:
         "inputs is never redistributed. Change is relative to baseline, so negative is better.",
         "",
     ]
+    fixed, tables = [], []
     for dimension, order, label, header, extra in (
         ("level", LEVEL_ORDER, lambda v: f"level {v}", "Optimization level", None),
         ("target_class", TARGETS, str, "Target class", None),
         ("band", BAND_ORDER, lambda v: BAND_LABELS.get(v, str(v)), "Width band", None),
         ("family", FAMILIES, str, "Family", lambda v: FAMILY_NAMES.get(v, "")),
     ):
+        rows = group_rows(report, dimension, order)
+        if len(rows) == 1:
+            fixed.append(f"one {header.lower()} ({label(rows[0]['group'][dimension])})")
+            continue
         table = _slice_table(view, dimension, order, label, header, extra)
         if table:
-            lines += [f"### By {header.lower()}", ""] + table
+            tables += [f"### By {header.lower()}", ""] + table
+    if fixed:
+        lines += [
+            "Every case shares " + " and ".join(fixed) + "; those slices equal the headline score.",
+            "",
+        ]
+    lines += tables
     pivots = _pivot(view, "band", BAND_ORDER, "band") + _pivot(
         view, "target_class", TARGETS, "target"
     )
