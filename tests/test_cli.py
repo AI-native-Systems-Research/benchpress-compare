@@ -20,8 +20,8 @@ def test_help_and_four_path_requirement(tmp_path, capsys):
 def test_audit_is_coordinator_only(capsys):
     assert main(["audit"]) == 0
     output = json.loads(capsys.readouterr().out)
-    assert output["candidate_count"] == 149
-    assert output["expected_observations"] == 5364
+    assert output["candidate_count"] == 147
+    assert output["expected_observations"] == 5292
     result = subprocess.run(
         [
             sys.executable,

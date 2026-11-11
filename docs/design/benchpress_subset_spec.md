@@ -1,6 +1,6 @@
 # Benchpress subset specification
 
-Prepared 2026-11-09. **Status: proposed full-pool design; eligibility screening and benchmark collection have not been run for this specification.**
+Prepared 2026-11-09, revised 2026-11-10. **Status: proposed full-pool design; eligibility screening and benchmark collection have not been run for this specification.**
 
 This specification enumerates the **full routing-relevant pool within 8–133 qubits** identified by the supplied studies, rather than the compact 34-circuit shortlist. It defines targets, eight families, every candidate input and its recipe group, width bands, and weights.
 
@@ -10,11 +10,11 @@ The [high-level plan](benchpress_for_sabre_claude_high_level_plan.md) controls t
 
 Compare `baseline/` and `evolve/` through full preset transpilation, measuring final native two-qubit count (N2) and two-qubit depth (D2), with observed SABRE routing work reported alongside them. This is a whole-build comparison; it does not isolate SABRE from synthesis and downstream optimization.
 
-The inventory contains **138 distinct main-cohort candidates**: 44 QASMBench inputs, 32 additional Feynman inputs, six Summit inputs, and 56 HamLib inputs. Two more Feynman source names alias the listed QASMBench adders. Every main-table row passes the routing-relevance screen stated in §4: SABRE executed in every historically measured configuration on the three target classes, no measured configuration fell below the 10-SWAP threshold, and the row is not a structural duplicate of another row. Eleven further in-range candidates from the studies fail one of those tests on historical evidence (six below-threshold inputs and five coefficient-only or state-preparation-only variants); §5 lists them with zero main-score weight, together with the target-specific and known-local cases. “Full pool” means the native transpilation inputs covered by the studies, not every unused QASM asset or newly generated size variant.
+The inventory contains **136 distinct main-cohort candidates**: 43 QASMBench inputs, 32 additional Feynman inputs, six Summit inputs, and 55 HamLib inputs. Two more Feynman source names alias the listed QASMBench adders. Every main-table row passes the routing-relevance screen stated in §4: SABRE executed in every historically measured configuration on the three target classes, no measured configuration fell below the 10-SWAP threshold, and the row is not a structural duplicate of another row. Eleven further in-range candidates from the studies fail one of those tests on historical evidence (six below-threshold inputs and five coefficient-only or state-preparation-only variants); §5 lists them with zero main-score weight, together with the target-specific and known-local cases. “Full pool” means the native transpilation inputs covered by the studies, not every unused QASM asset or newly generated size variant.
 
-All numerical input/case weights below are **planning allocations conditional on all 138 candidates being admitted at the listed widths**. They are not an assertion that historical routing relevance satisfies the new screen. Recompute the same declared formula after baseline-only screening and deduplication, then freeze the final manifest before inspecting evolved results. The below-threshold and variant candidates in §5 remain explicit screening candidates; they acquire weight only if the screen admits them, and the formula is then recomputed over the admitted set.
+All numerical input/case weights below are **planning allocations conditional on all 136 candidates being admitted at the listed widths**. They are not an assertion that historical routing relevance satisfies the new screen. Recompute the same declared formula after baseline-only screening and deduplication, then freeze the final manifest before inspecting evolved results. The below-threshold and variant candidates in §5 remain explicit screening candidates; they acquire weight only if the screen admits them, and the formula is then recomputed over the admitted set.
 
-Deep inputs such as BWT, `factor247_n15`, `square_root_n60`, `hwb11/12`, `vqe_uccsd_n28` and `ham_ham_JW24` are included in this full pool. A resource pilot must budget for them; expense alone is not permission to remove them after observing results.
+Deep inputs such as BWT, `factor247_n15`, `hwb11/12`, `vqe_uccsd_n28` and `ham_ham_JW24` are included in this full pool. A resource pilot must budget for them; expense alone is not permission to remove them after observing results.
 
 ## 2. Targets and optimization levels
 
@@ -54,14 +54,14 @@ The following supported-band allocations describe the listed candidate inventory
 | Family | Scope | Inputs | S share of total | M share of total | L share of total | Total |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
 | F1 | Fourier, phase estimation and factoring | 6 | 2.5% | 3.75% | 6.25% | 12.5% |
-| F2 | Register arithmetic | 32 | 2.5% | 3.75% | 6.25% | 12.5% |
+| F2 | Register arithmetic | 31 | 2.5% | 3.75% | 6.25% | 12.5% |
 | F3 | Boolean, oracle, hub and parity-check circuits | 27 | 2.5% | 3.75% | 6.25% | 12.5% |
 | F4 | Variational and quantum-learning circuits | 6 | 0% | 4.6875% | 7.8125% | 12.5% |
 | F5 | Combinatorial optimization | 25 | 2.5% | 3.75% | 6.25% | 12.5% |
-| F6 | Spin/lattice simulation and quantum walks | 18 | 2.5% | 3.75% | 6.25% | 12.5% |
+| F6 | Spin/lattice simulation and quantum walks | 17 | 2.5% | 3.75% | 6.25% | 12.5% |
 | F7 | Electronic and vibrational chemistry | 20 | 5% | 7.5% | 0% | 12.5% |
 | F8 | Random and Clifford circuits | 4 | 0% | 4.6875% | 7.8125% | 12.5% |
-| **Total** | | **138** | **17.5%** | **35.625%** | **46.875%** | **100%** |
+| **Total** | | **136** | **17.5%** | **35.625%** | **46.875%** | **100%** |
 
 Large has the largest planning allocation. F4 and F8 have no small candidates; F7 has no large candidates. The global shares consequently differ from 20%/30%/50%. Publish the recalculated marginals after screening, and do not claim large-workload priority unless large remains the largest allocation.
 
@@ -174,8 +174,7 @@ The doubled `ham_` in IDs such as `ham_ham_BK12` is intentional. Names alone do 
 | `F/mod_adder_1024.qasm` | 28 | M | `modular-arithmetic` | 0.535714% | 1/1120 |
 | `Q/large/adder_n28` | 28 | M | `ripple-addition` | 0.267857% | 1/2240 |
 | `Q/large/adder_n64` | 64 | M | `ripple-addition` | 0.267857% | 1/2240 |
-| `Q/large/square_root_n45` | 45 | M | `square-root` | 0.267857% | 1/2240 |
-| `Q/large/square_root_n60` | 60 | M | `square-root` | 0.267857% | 1/2240 |
+| `Q/large/square_root_n45` | 45 | M | `square-root` | 0.535714% | 1/1120 |
 | `F/gf2^32_mult.qasm` | 96 | L | `finite-field-multiplication` | 2.083333% | 1/288 |
 | `Q/large/multiplier_n75` | 75 | L | `integer-multiplication` | 2.083333% | 1/288 |
 | `Q/large/adder_n118` | 118 | L | `ripple-addition` | 2.083333% | 1/288 |
@@ -266,12 +265,11 @@ The doubled `ham_` in IDs such as `ham_ham_BK12` is intentional. Names alone do 
 | `H/ham_bh_graph-1D-grid-nonpbc-qubitnodes_Lx-12_U-40_enc-unary_d-4` | 48 | M | `Bose-Hubbard` | 0.3125% | 1/1920 |
 | `H/ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-24_U-20_enc-stdbinary_d-4` | 48 | M | `Bose-Hubbard` | 0.3125% | 1/1920 |
 | `H/ham_bh_graph-2D-triag-pbc-qubitnodes_Lx-5_Ly-5_U-30_enc-unary_d-4` | 60 | M | `Bose-Hubbard` | 0.3125% | 1/1920 |
-| `H/ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-10_U-30_enc-unary_d-8` | 80 | L | `Bose-Hubbard` | 0.347222% | 1/1728 |
-| `H/ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-46_U-2_enc-gray_d-4` | 92 | L | `Bose-Hubbard` | 0.347222% | 1/1728 |
-| `H/ham_bh_graph-2D-grid-nonpbc-qubitnodes_Lx-7_Ly-7_U-70_enc-gray_d-4` | 98 | L | `Bose-Hubbard` | 0.347222% | 1/1728 |
-| `H/ham_bh_graph-2D-triag-pbc-qubitnodes_Lx-10_Ly-10_U-30_enc-stdbinary_d-4` | 100 | L | `Bose-Hubbard` | 0.347222% | 1/1728 |
-| `H/ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-60_U-10_enc-stdbinary_d-4` | 120 | L | `Bose-Hubbard` | 0.347222% | 1/1728 |
-| `H/ham_bh_graph-2D-triag-pbc-qubitnodes_Lx-3_Ly-22_U-70_enc-unary_d-4` | 132 | L | `Bose-Hubbard` | 0.347222% | 1/1728 |
+| `H/ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-10_U-30_enc-unary_d-8` | 80 | L | `Bose-Hubbard` | 0.416667% | 1/1440 |
+| `H/ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-46_U-2_enc-gray_d-4` | 92 | L | `Bose-Hubbard` | 0.416667% | 1/1440 |
+| `H/ham_bh_graph-2D-grid-nonpbc-qubitnodes_Lx-7_Ly-7_U-70_enc-gray_d-4` | 98 | L | `Bose-Hubbard` | 0.416667% | 1/1440 |
+| `H/ham_bh_graph-2D-triag-pbc-qubitnodes_Lx-10_Ly-10_U-30_enc-stdbinary_d-4` | 100 | L | `Bose-Hubbard` | 0.416667% | 1/1440 |
+| `H/ham_bh_graph-1D-grid-pbc-qubitnodes_Lx-60_U-10_enc-stdbinary_d-4` | 120 | L | `Bose-Hubbard` | 0.416667% | 1/1440 |
 | `H/ham_fh-graph-1D-grid-pbc-qubitnodes_Lx-50_U-2_enc-jw` | 100 | L | `Fermi-Hubbard` | 2.083333% | 1/288 |
 | `H/ham_graph-2D-grid-nonpbc-qubitnodes_Lx-5_Ly-15_h-3` | 75 | L | `TFIM` | 1.041667% | 1/576 |
 | `H/ham_graph-2D-triag-pbc-qubitnodes_Lx-13_Ly-13_h-0.1` | 91 | L | `TFIM` | 1.041667% | 1/576 |
@@ -343,6 +341,8 @@ These inputs cannot join the common cohort under their documented local embeddin
 | `Q/large/ising_n98` | F6 / L (98) | Known embeddable chain; heavy-hex's historical VF2 search failure does not make required routing nonzero | 0 |
 | `S/test_BVlike_simplification_transpile` | F3 / L by declared width (100) | Zero two-qubit workload after initialization; excluded | 0 |
 
+Two inputs listed in the 2026-11-09 revision were removed from the pool on 2026-11-10 and carry no weight: `Q/large/square_root_n60` (F2 / M, `square-root`) and `H/ham_bh_graph-2D-triag-pbc-qubitnodes_Lx-3_Ly-22_U-70_enc-unary_d-4` (F6 / L, `Bose-Hubbard`). They are not screening candidates. Under the §3 formula their allocations pass to `Q/large/square_root_n45` and to the five remaining large-band `Bose-Hubbard` inputs; no family, band or recipe share changes.
+
 The next table lists in-range candidates that the studies mark routing-relevant but that fail the §4 main-table screen on historical evidence. They are screening candidates only. A below-threshold candidate joins the main cohort only if the §6 preflight yields a median of at least 10 SWAPs in all six configurations; a structural variant never joins while its canonical fixture is admitted. Counts are single-seed SWAPs at L2/L3.
 
 | Input | Family / band | Reason for zero planning weight | Main weight |
@@ -383,7 +383,7 @@ The following main-table candidates have specific eligibility or validation risk
 5. Recompute `S[f]`, `Z[f]`, `K[f,b]`, `N[f,b,k]` and exact weights over the admitted distinct inputs. Freeze both the main 20:30:50 weights and an equal-band sensitivity allocation using `q[b]=1/3` over the same supported bands. If any family is empty, the eight-family score is unavailable; do not redistribute its weight silently.
 6. Audit the exact marginals: total 1; each family 1/8; each target 1/3; each level 1/2; each family/target/level 1/48. Publish supported bands and actual global band shares. Missing observations after freeze never change membership or weights.
 
-With all 138 candidates admitted, the plan would contain **828 cases**, **2,484 baseline preflight compilations**, and **4,968 main compilations** for two builds × three matched comparison seeds. These are conditional planning counts, excluding pilots, retries, supplemental coverage, and the preflight of the eleven §5 screening candidates (66 cases, 198 compilations) that must also run before the manifest is frozen. Actual admitted counts require the screen above.
+With all 136 candidates admitted, the plan would contain **816 cases**, **2,448 baseline preflight compilations**, and **4,896 main compilations** for two builds × three matched comparison seeds. These are conditional planning counts, excluding pilots, retries, supplemental coverage, and the preflight of the eleven §5 screening candidates (66 cases, 198 compilations) that must also run before the manifest is frozen. Actual admitted counts require the screen above.
 
 Comparison seeds contribute equally to their case's arithmetic mean; they create no additional workload weight. For each metric separately, compute the evolved/baseline ratio of those means, then the weighted geometric mean over cases. Do not combine N2 and D2 into a single score. Retain an admitted evolved result even if it bypasses SABRE or needs no SWAPs. Missing, invalid or non-positive-ratio observations prevent a full logarithmic score and must not be silently dropped or reweighted.
 

@@ -13,7 +13,6 @@ from .schema import PROTOCOLS
 # LSF job, so no slow compile waits behind another in a sequential shard.
 BIG_CIRCUITS = {
     "Q/large/bwt_n37": {"observed_seconds": 1500, "observed_peak_gb": 9},
-    "Q/large/square_root_n60": {"observed_seconds": 1470, "observed_peak_gb": 8},
     "Q/large/vqe_uccsd_n28": {"observed_seconds": 355, "observed_peak_gb": 2},
     "F/hwb12.qasm": {"observed_seconds": 346, "observed_peak_gb": 2.6},
     "Q/medium/bwt_n21": {"observed_seconds": 339, "observed_peak_gb": 2.5},

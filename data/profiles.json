@@ -5,7 +5,7 @@
     "design": "benchpress-eight-family-v1",
     "specification": {
       "path": "docs/design/benchpress_subset_spec.md",
-      "revision": "2026-11-09"
+      "revision": "2026-11-10"
     },
     "input_ids": null,
     "targets": [

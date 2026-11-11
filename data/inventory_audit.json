@@ -4,8 +4,8 @@
   "corpus_revision": "4c04b38a53fc231a89f1a6bc9541c1b641ed6dcf",
   "python": "3.12.12",
   "qiskit": "2.5.2",
-  "candidate_count": 149,
-  "fixture_roundtrip_verified": 149,
+  "candidate_count": 147,
+  "fixture_roundtrip_verified": 147,
   "rows": [
     {
       "input_id": "Q/medium/qft_n18",
@@ -244,13 +244,6 @@
       "declared": 45,
       "active": 45,
       "hash": "c1a7550a72db8d7e3da42ed82327d806d136358796f32a8ed92ca4f51a814e55"
-    },
-    {
-      "input_id": "Q/large/square_root_n60",
-      "status": "verified",
-      "declared": 60,
-      "active": 60,
-      "hash": "882b764f12716bea9ddc4eefb72972af0750251ffb6381bc2fdbf862e4b3815c"
     },
     {
       "input_id": "F/gf2^32_mult.qasm",
@@ -776,13 +769,6 @@
       "declared": 120,
       "active": 120,
       "hash": "f38a472f51cf339ee7afcb8c747204dd7c786a0226a172ab3ae9fda52646a3f7"
-    },
-    {
-      "input_id": "H/ham_bh_graph-2D-triag-pbc-qubitnodes_Lx-3_Ly-22_U-70_enc-unary_d-4",
-      "status": "verified",
-      "declared": 132,
-      "active": 132,
-      "hash": "dff9597648be2824e65eb3cf296c538cc4032cf7836aaa8c776fbae44dc98ed2"
     },
     {
       "input_id": "H/ham_fh-graph-1D-grid-pbc-qubitnodes_Lx-50_U-2_enc-jw",

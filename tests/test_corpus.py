@@ -8,16 +8,16 @@ from benchpress_compare.corpus import CORPUS_REVISION, load_catalogue, verify_co
 def test_reviewed_inventory_and_source_totals():
     data = load_catalogue()
     assert data["revision"] == CORPUS_REVISION
-    assert len(data["candidates"]) == 149
+    assert len(data["candidates"]) == 147
     main = [r for r in data["candidates"] if r["category"] == "main"]
-    assert Counter(r["input_id"][0] for r in main) == {"Q": 44, "F": 32, "S": 6, "H": 56}
+    assert Counter(r["input_id"][0] for r in main) == {"Q": 43, "F": 32, "S": 6, "H": 55}
     assert Counter(r["family"] for r in main) == {
         "F1": 6,
-        "F2": 32,
+        "F2": 31,
         "F3": 27,
         "F4": 6,
         "F5": 25,
-        "F6": 18,
+        "F6": 17,
         "F7": 20,
         "F8": 4,
     }

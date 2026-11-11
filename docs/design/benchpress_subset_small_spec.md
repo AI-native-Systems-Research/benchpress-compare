@@ -27,7 +27,7 @@ Case weight equals input weight.
 Selection rules, per family:
 
 1. **Bands S and M only** (8–64 active qubits). The large band is left to the evolve subset.
-2. **No big circuits**: nothing in the harness's `BIG_CIRCUITS` list (`factor247_n15`, `bwt_n21`, `vqe_uccsd_n28`, `hwb11`, `hwb12`, `bwt_n37`, `square_root_n60`). Also excluded is any input whose baseline compile exceeds 10 s on heavy-hex L2, for example `hwb8`, `hwb10`, `square_root_n45` and the larger HamLib molecules such as `ham_ham_JW-18`.
+2. **No big circuits**: nothing in the harness's `BIG_CIRCUITS` list (`factor247_n15`, `bwt_n21`, `vqe_uccsd_n28`, `hwb11`, `hwb12`, `bwt_n37`). Also excluded is any input whose baseline compile exceeds 10 s on heavy-hex L2, for example `hwb8`, `hwb10`, `square_root_n45` and the larger HamLib molecules such as `ham_ham_JW-18`.
 3. **Three inputs per family**, using as many distinct recipe groups as the family's eligible S/M inputs allow, and at least one M input where the family has M candidates. F1 (`QFT`, `factoring`) and F4 (`DNN-hub`, `QUGAN`) have only two eligible recipes, so two of their three inputs share one.
 4. **Strong routing signal**: a median of at least 50 inserted SWAPs on heavy-hex L2 in the run-003 baseline (or at least 101 in the closest measured configuration where heavy-hex L2 was not measured). Threshold-edge inputs from the full specification's risk table are excluded.
 

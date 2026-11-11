@@ -10,7 +10,7 @@ The [small subset](benchpress_subset_small_spec.md) is a strict subset of this d
 
 The comparison is the same as in the full specification: `baseline/` against `evolve/` through full preset transpilation, measuring final native two-qubit count (N2) and two-qubit depth (D2) separately, with SABRE routing work recorded alongside them. Everything not stated here follows the full specification: input identities and source lookup (§4 there), fixture identity and deduplication, target definitions, transpile settings, metrics, validation, admission and failure handling.
 
-A score on this subset is a **search signal, not a benchmark result**. It covers one of the six target/level configurations and 44 of the 138 main inputs. A candidate change found with it must be confirmed on the full specification (all three targets, L2 and L3, all admitted inputs) before any claim is made. The 94 main inputs left out of this subset act as a natural hold-out set for detecting changes that over-fit the selection.
+A score on this subset is a **search signal, not a benchmark result**. It covers one of the six target/level configurations and 44 of the 136 main inputs. A candidate change found with it must be confirmed on the full specification (all three targets, L2 and L3, all admitted inputs) before any claim is made. The 92 main inputs left out of this subset act as a natural hold-out set for detecting changes that over-fit the selection.
 
 ## 2. Target, level and seeds
 
@@ -34,14 +34,14 @@ Because each input has exactly one case, **case weight equals input weight**.
 
 ## 3. Selection rules
 
-The 44 inputs were chosen from the 138 main-table inputs of the full specification by these rules, applied per family:
+The 44 inputs were chosen from the 136 main-table inputs of the full specification by these rules, applied per family:
 
 1. **Keep every band the family supports** in the full pool (S/M/L; F4 and F8 have no S, F7 has no L), so the global band split equals the full design's planning split.
 2. **Maximize distinct recipe groups** within each band; prefer the recipes that carry the most weight in the full design.
 3. **Strong routing signal on heavy-hex**: every selected input inserted a median of at least 50 SWAPs on heavy-hex L2 in the run-003 baseline (or, where that configuration was not measured, at least 101 on heavy-hex L3 or another L2 target). Threshold-edge inputs from the full specification's risk table (`bv_n19`, `multiply_n13`, `tof_5`, the 9–15-qubit Feynman circuits) are excluded.
 4. **Include deep workloads**, so that a search cannot win by improving only shallow circuits: `factor247_n15`, `bwt_n21`, `vqe_uccsd_n28`, `hwb10`, `gf2^32_mult`, both QV100 inputs and Clifford-100, each with about 4,800–137,000 inserted SWAPs.
 5. **Runtime limits**: baseline time per compile must not exceed 400 s for inputs in `BIG_CIRCUITS` (each observation is its own LSF job), and 70 s for all other inputs (each case's six observations run sequentially in one job). This excludes:
-   - `bwt_n37` and `square_root_n60` (800–1,500 s per compile);
+   - `bwt_n37` (800–1,500 s per compile; `square_root_n60`, which was similar, has since been removed from the full pool);
    - `square_root_n45` (106–152 s per compile, not in `BIG_CIRCUITS`);
    - `ham_ham_JW24` (77–116 s per compile).
 

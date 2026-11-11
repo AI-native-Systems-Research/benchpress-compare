@@ -84,7 +84,7 @@ uv run benchpress-compare run \
 | --- | ---: | --- | ---: |
 | `small` | 22 | Heavy-hex / L2 | 132 |
 | `evolve` | 44 | Heavy-hex / L2 | 264 |
-| `full` (default) | 149 | Square, heavy-hex, FakeTorino / L2 and L3 | 5,364 |
+| `full` (default) | 147 | Square, heavy-hex, FakeTorino / L2 and L3 | 5,292 |
 
 Use `small` to for a short run, `evolve` when using in evolve frameworks like Coral, and `full` to confirm
 results. 

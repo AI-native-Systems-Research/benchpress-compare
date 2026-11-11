@@ -36,10 +36,10 @@ def load_catalogue(path: str | Path | None = None) -> dict:
     if data.get("schema_version") != 1 or data.get("revision") != CORPUS_REVISION:
         raise ValueError("Unsupported catalogue schema or corpus revision")
     candidates = data["candidates"]
-    if len(candidates) != 149 or len({c["input_id"] for c in candidates}) != 149:
-        raise ValueError("The standard catalogue requires 149 distinct candidates")
-    if sum(c["category"] == "main" for c in candidates) != 138:
-        raise ValueError("The standard catalogue requires 138 main-table candidates")
+    if len(candidates) != 147 or len({c["input_id"] for c in candidates}) != 147:
+        raise ValueError("The standard catalogue requires 147 distinct candidates")
+    if sum(c["category"] == "main" for c in candidates) != 136:
+        raise ValueError("The standard catalogue requires 136 main-table candidates")
     return data
 
 
@@ -79,7 +79,7 @@ def verify_corpus(root: str | Path, catalogue: dict | None = None) -> dict:
         "revision": CORPUS_REVISION,
         "assets": assets,
         "catalogue_hash": canonical_hash(catalogue),
-        "candidate_count": 149,
+        "candidate_count": 147,
     }
 
 

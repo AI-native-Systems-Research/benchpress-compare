@@ -563,23 +563,7 @@
         "sha256": "1ab43276437fe6002f2464cbb8756e30a7a7f8d57b84c5df990b39fadf8f8cc6"
       },
       "aliases": [],
-      "planning_case_weight": "1/2240",
-      "alias_sources": []
-    },
-    {
-      "input_id": "Q/large/square_root_n60",
-      "declared_width": 60,
-      "family": "F2",
-      "band": "M",
-      "recipe": "square-root",
-      "category": "main",
-      "source": {
-        "kind": "qasm",
-        "path": "benchpress/qasm/qasmbench-large/square_root_n60/square_root_n60.qasm",
-        "sha256": "9eca8cadef1060758fc0653732795ee5e766c58d28b4b49bace733dc20127f3c"
-      },
-      "aliases": [],
-      "planning_case_weight": "1/2240",
+      "planning_case_weight": "1/1120",
       "alias_sources": []
     },
     {
@@ -1873,7 +1857,7 @@
         "ham_terms": 3981
       },
       "aliases": [],
-      "planning_case_weight": "1/1728",
+      "planning_case_weight": "1/1440",
       "alias_sources": []
     },
     {
@@ -1894,7 +1878,7 @@
         "ham_terms": 1611
       },
       "aliases": [],
-      "planning_case_weight": "1/1728",
+      "planning_case_weight": "1/1440",
       "alias_sources": []
     },
     {
@@ -1915,7 +1899,7 @@
         "ham_terms": 2836
       },
       "aliases": [],
-      "planning_case_weight": "1/1728",
+      "planning_case_weight": "1/1440",
       "alias_sources": []
     },
     {
@@ -1936,7 +1920,7 @@
         "ham_terms": 4951
       },
       "aliases": [],
-      "planning_case_weight": "1/1728",
+      "planning_case_weight": "1/1440",
       "alias_sources": []
     },
     {
@@ -1957,28 +1941,7 @@
         "ham_terms": 2101
       },
       "aliases": [],
-      "planning_case_weight": "1/1728",
-      "alias_sources": []
-    },
-    {
-      "input_id": "H/ham_bh_graph-2D-triag-pbc-qubitnodes_Lx-3_Ly-22_U-70_enc-unary_d-4",
-      "declared_width": 132,
-      "family": "F6",
-      "band": "L",
-      "recipe": "Bose-Hubbard",
-      "category": "main",
-      "source": {
-        "kind": "hamlib",
-        "path": "benchpress/hamiltonian/hamlib/100_representative.json",
-        "base_id": "ham_bh_graph-2D-triag-pbc-qubitnodes_Lx-3_Ly-22_U-70_enc-unary_d-4",
-        "sha256": "c4b460e790f4c2ddcd4ff0220bcdf65d52193155c281fad3e5cdafb4d5c2516c",
-        "ham_instance": "/bh_graph-2D-triag-pbc-qubitnodes_Lx-3_Ly-22_U-70_enc-unary_d-4,",
-        "ham_problem": "BH_D-2_d-4",
-        "ham_qubits": 132,
-        "ham_terms": 7195
-      },
-      "aliases": [],
-      "planning_case_weight": "1/1728",
+      "planning_case_weight": "1/1440",
       "alias_sources": []
     },
     {

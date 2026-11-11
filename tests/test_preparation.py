@@ -209,7 +209,7 @@ def test_profiles_freeze_only_the_selected_cases_with_shared_identities_and_seed
     monkeypatch.setattr(module, "load_catalogue", load_catalogue)
     fake_preparation["site"] = SiteConfig(queue="normal", job_wall_seconds=86400)
     plans = {}
-    for name, inputs, cases, jobs in (("full", 149, 894, None), ("evolve", 44, 44, 59),
+    for name, inputs, cases, jobs in (("full", 147, 882, None), ("evolve", 44, 44, 59),
                                      ("small", 22, 22, 22)):
         directory = tmp_path / name
         directory.mkdir()

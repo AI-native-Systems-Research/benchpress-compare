@@ -79,7 +79,7 @@ design (`--allow-missing-families`), never silent reweighting.
 
 - Validate both actual source versions' release/toolchain compatibility,
   typed import round trips, SABRE settings and instrumentation invariance.
-- Complete all 2,682 baseline preflight observations (149 candidates × three
+- Complete all 2,646 baseline preflight observations (147 candidates × three
   targets × two levels × three seeds), plus separate resource pilots; retain
   every admitted, excluded, and unresolved disposition.
 - Run real local A/A observations, interruption/resume and cross-run baseline

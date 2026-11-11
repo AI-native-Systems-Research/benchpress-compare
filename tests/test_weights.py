@@ -122,7 +122,7 @@ def test_unsupported_width_and_float_weight_rejected():
 def test_full_catalogue_reproduces_every_conditional_planning_fraction():
     catalogue = json.loads((Path(__file__).parents[1] / "data" / "candidates.json").read_text())
     pool = [item for item in catalogue["candidates"] if item["category"] == "main"]
-    assert len(pool) == 138
+    assert len(pool) == 136
     allocation = allocate_weights(pool)
     for item in pool:
         assert read_fraction(allocation["inputs"][item["input_id"]]["case_weight"]) == Fraction(

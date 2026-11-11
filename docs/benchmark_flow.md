@@ -96,7 +96,7 @@ never compiles a benchmark circuit; it only builds, freezes and plans.
 1. **Corpus**: uses the `--corpus` mirror, or downloads the pinned Benchpress
    revision, and verifies it against the catalogue
    ([corpus/](../src/benchpress_compare/corpus/), [data/candidates.json](../data/candidates.json)).
-   The catalogue has 149 candidates: 138 main-table inputs and 11 additional ones,
+   The catalogue has 147 candidates: 136 main-table inputs and 11 additional ones,
    five of which are declared structural variants of a main input.
 2. **Source snapshots**: content-addressed copies of both source trees
    ([builds/snapshot.py](../src/benchpress_compare/builds/snapshot.py)). The baseline
@@ -137,19 +137,19 @@ as observations ([tasks.py](../src/benchpress_compare/tasks.py), [worker/](../sr
 9. **Observations** ([planner.observations_for](../src/benchpress_compare/planner.py)):
    every case × every seed gets one baseline and one evolve observation. Arm order
    alternates deterministically. With the full catalogue and 3 seeds that is
-   149 × 6 × 3 × 2 = **5,364 observations**.
+   147 × 6 × 3 × 2 = **5,292 observations**.
 10. **Jobs** ([planner.shard_bundles](../src/benchpress_compare/planner.py)), LSF only:
     - Every observation of an input in `BIG_CIRCUITS` runs as **its own job**, so
-      baseline and evolve run separately. These are the seven inputs whose single
+      baseline and evolve run separately. These are the six inputs whose single
       compiles took about 3 to 25 minutes in earlier baseline measurements, for
-      example `Q/large/bwt_n37` and `Q/large/square_root_n60`.
+      example `Q/large/bwt_n37` and `Q/large/vqe_uccsd_n28`.
     - All other observations are cut in plan order into sequential jobs of at most
       `shard_max_observations` (default **6**, which is exactly one case: 3 seeds on
       both arms), and never more than the job wall limit can hold if every
       observation used its full watchdog.
 
-    With the full catalogue that is **1,104 jobs**: 252 single-observation jobs for
-    the big inputs and 852 one-case jobs for the rest. The local executor ignores
+    With the full catalogue that is **1,062 jobs**: 216 single-observation jobs for
+    the big inputs and 846 one-case jobs for the rest. The local executor ignores
     this grouping and runs each observation as its own process.
 11. **Publish**: `plan.sha256` is written first, then `plan.json`. The plan contains
     the cases, builds, observations, jobs (`bundles`), the `BIG_CIRCUITS` list, the
