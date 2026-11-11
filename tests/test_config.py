@@ -40,6 +40,20 @@ def test_site_has_no_implicit_queue(tmp_path):
     assert SiteConfig.read(path).queue == "test"
 
 
+def test_site_controller_threads_default_and_must_be_positive(tmp_path):
+    path = tmp_path / "site.toml"
+    path.write_text('[lsf]\nqueue="test"\n')
+    cfg = SiteConfig.read(path)
+    assert (cfg.submit_workers, cfg.collect_workers) == (8, 8)
+    path.write_text('[lsf]\nqueue="test"\nsubmit_workers=3\ncollect_workers=1\n')
+    cfg = SiteConfig.read(path)
+    assert (cfg.submit_workers, cfg.collect_workers) == (3, 1)
+    for key in ("submit_workers", "collect_workers"):
+        path.write_text(f'[lsf]\nqueue="test"\n{key}=0\n')
+        with pytest.raises(CompareError, match=key):
+            SiteConfig.read(path)
+
+
 @pytest.mark.parametrize("profile,wall", [("evolve", 900), ("small", 60)])
 def test_subset_defaults_and_explicit_watchdog(tmp_path, profile, wall):
     from benchpress_compare.identity import canonical_hash

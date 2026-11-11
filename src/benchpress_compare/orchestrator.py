@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import concurrent.futures
 import math
 import os
 from pathlib import Path
@@ -25,10 +26,11 @@ from .store import Lease, Store, publish_bundle, verify_bundle
 SCHEDULER_TERMINAL = frozenset({"DONE", "EXIT", "INFRA_FAILED", "RESOURCE_LIMIT", "CANCELLED"})
 # Bounds the commits per controller iteration so a large batch of finished jobs
 # cannot hold off dispatch; the rest are committed on the next iteration. It must
-# stay above the observations one dispatch window can submit (about 18 shards of
-# up to 6 in 20 s), or finished work piles up in `active` faster than it is
-# committed and every later iteration grows longer.
-COLLECT_PER_ITERATION = 250
+# stay above the observations one dispatch window can submit (with parallel
+# submission about 50 shards of up to 6 in 20 s), or finished work piles up in
+# `active` faster than it is committed and every later iteration grows longer.
+# With `collect_workers` publications in flight, 500 take about 15 s.
+COLLECT_PER_ITERATION = 500
 
 
 def work_key(spec):
@@ -96,6 +98,10 @@ class ExecutionEngine:
             else 1_000_000
         )
         self.poll_interval = self.site.poll_seconds if self.site else 0.1
+        # The local executor starts processes directly and its publications hit
+        # a local filesystem, so it keeps the sequential controller loop.
+        self.submit_workers = self.site.submit_workers if self.site else 1
+        self.collect_workers = self.site.collect_workers if self.site else 1
 
     def state(self, status, **details):
         self.journal.append("run_state", {"status": status, **details})
@@ -238,26 +244,30 @@ class ExecutionEngine:
             sum(spec["runtime_profile"]["memory_bytes"] for spec in owned.values()),
         )
 
-    def _launch(self, spec):
-        attempt = self._new_attempt(spec)
-        token, directory = attempt["submission_token"], Path(attempt["directory"])
-        command = self._command(spec, directory)
-        job = self.executor.submit(
-            command,
-            directory,
-            spec["runtime_profile"],
-            name=f"bpc-{canonical_hash(str(self.root))[:8]}-{token}",
-            token=token,
-        )
-        attempt.update(job=job, status=job["status"])
-        self._save_attempt(attempt)
-        self.journal.append(
-            "submitted",
-            {"work_key": work_key(spec), "attempt_id": attempt["attempt_id"], "job": job},
-        )
-        return attempt
+    # A launch has three steps. Intents and the shard manifest are recorded
+    # first and the scheduler's reply is attached to every attempt afterwards,
+    # both serially on the controller thread so the journal and attempt files
+    # keep the protocol a restarted controller adopts. Only the submission in
+    # between, which writes the job's own directory and runs `bsub`, overlaps
+    # across a dispatch batch.
 
-    def _launch_bundle(self, specs, bundle):
+    def _job_name(self, token):
+        return f"bpc-{canonical_hash(str(self.root))[:8]}-{token}"
+
+    def _prepare_launch(self, spec):
+        attempt = self._new_attempt(spec)
+        directory = Path(attempt["directory"])
+        return {
+            "specs": [spec],
+            "attempts": [attempt],
+            "bundle": None,
+            "token": attempt["submission_token"],
+            "directory": directory,
+            "command": self._command(spec, directory),
+            "profile": spec["runtime_profile"],
+        }
+
+    def _prepare_bundle(self, specs, bundle):
         token = uuid.uuid4().hex
         directory = self.root / "jobs/shards" / token
         attempts = [
@@ -284,40 +294,88 @@ class ExecutionEngine:
             ],
         }
         atomic_write_json(directory / "shard.json", manifest)
-        command = [
-            sys.executable,
-            "-m",
-            "benchpress_compare.worker.shard",
-            str(directory / "shard.json"),
-        ]
-        job = self.executor.submit(
-            command,
-            directory,
-            profile,
-            name=f"bpc-{canonical_hash(str(self.root))[:8]}-{token}",
-            token=token,
+        return {
+            "specs": specs,
+            "attempts": attempts,
+            "bundle": bundle,
+            "token": token,
+            "directory": directory,
+            "command": [
+                sys.executable,
+                "-m",
+                "benchpress_compare.worker.shard",
+                str(directory / "shard.json"),
+            ],
+            "profile": profile,
+        }
+
+    def _submit(self, prepared):
+        return self.executor.submit(
+            prepared["command"],
+            prepared["directory"],
+            prepared["profile"],
+            name=self._job_name(prepared["token"]),
+            token=prepared["token"],
         )
-        job.update(
-            shard=True,
-            shard_manifest=str(directory / "shard.json"),
-            shard_manifest_hash=file_hash(directory / "shard.json"),
-        )
-        # The common job belongs to all of these authorized attempts. A restart
-        # can adopt the shared job even if it crashed between these writes.
-        atomic_write_json(directory / "job.json", job)
+
+    def _submit_batch(self, batch):
+        if len(batch) == 1 or self.submit_workers == 1:
+            return [self._submit(prepared) for prepared in batch]
+        workers = min(len(batch), self.submit_workers)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+            return list(pool.map(self._submit, batch))
+
+    def _record_launch(self, prepared, job):
+        specs, attempts, bundle = prepared["specs"], prepared["attempts"], prepared["bundle"]
+        if bundle is not None:
+            manifest = prepared["directory"] / "shard.json"
+            job.update(
+                shard=True, shard_manifest=str(manifest), shard_manifest_hash=file_hash(manifest)
+            )
+            # The common job belongs to all of these authorized attempts. A restart
+            # can adopt the shared job even if it crashed between these writes.
+            atomic_write_json(prepared["directory"] / "job.json", job)
         for spec, attempt in zip(specs, attempts):
             attempt.update(job=job, status=job["status"])
             self._save_attempt(attempt)
-            self.journal.append(
-                "submitted",
-                {
-                    "work_key": work_key(spec),
-                    "attempt_id": attempt["attempt_id"],
-                    "job": job,
-                    "bundle_id": bundle.get("bundle_id"),
-                },
-            )
+            data = {"work_key": work_key(spec), "attempt_id": attempt["attempt_id"], "job": job}
+            if bundle is not None:
+                data["bundle_id"] = bundle.get("bundle_id")
+            self.journal.append("submitted", data)
         return attempts
+
+    def _launch(self, spec):
+        prepared = self._prepare_launch(spec)
+        return self._record_launch(prepared, self._submit(prepared))[0]
+
+    def _launch_bundle(self, specs, bundle):
+        prepared = self._prepare_bundle(specs, bundle)
+        return self._record_launch(prepared, self._submit(prepared))
+
+    def _dispatch_batch(self, batch, active):
+        """Submit a prepared batch and register its attempts; returns the job count."""
+        for prepared, job in zip(batch, self._submit_batch(batch)):
+            for spec, attempt in zip(prepared["specs"], self._record_launch(prepared, job)):
+                active[work_key(spec)] = (spec, attempt)
+        count = len(batch)
+        batch.clear()
+        return count
+
+    def _commit_batch(self, ready):
+        """Commit collected results, overlapping their publication.
+
+        Each commit publishes one immutable bundle (and a store copy for
+        baseline results): a dozen or more fsyncs on the shared filesystem,
+        about 0.2 s each, which was two thirds of the controller's time per
+        shard. Every shared write inside `_commit` (bundle rename, attempt
+        record, journal append, store lease) is already serialised by a file
+        lock, so the publications only overlap their staging and syncing.
+        """
+        if len(ready) <= 1 or self.collect_workers == 1:
+            return [self._commit(spec, attempt, result) for spec, attempt, result in ready]
+        workers = min(len(ready), self.collect_workers)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+            return list(pool.map(lambda item: self._commit(*item), ready))
 
     def _adopt(self, spec, attempts):
         live = [a for a in attempts if a["status"] not in TERMINAL | {"INTERRUPTED", "SUPERSEDED"}]
@@ -551,6 +609,7 @@ class ExecutionEngine:
                 uncertain = []
                 harness_failures = []
                 collected = 0
+                ready = []
                 owned = {}
                 for spec, attempt in active.values():
                     owned.setdefault(attempt["job"]["token"], attempt["job"])
@@ -691,7 +750,10 @@ class ExecutionEngine:
                             pending.append(spec)
                             del active[key]
                             continue
-                    results[key] = self._commit(spec, attempt, result)
+                    ready.append((key, spec, attempt, result))
+                committed = self._commit_batch([item[1:] for item in ready])
+                for (key, spec, attempt, result), record in zip(ready, committed):
+                    results[key] = record
                     del active[key]
                     if result["status"] == "HARNESS_FAILED":
                         harness_failures.append(result.get("reason", key))
@@ -705,12 +767,18 @@ class ExecutionEngine:
                 job_count, used_cpu, used_memory = self._scheduler_load(active)
                 launched = 0
                 deadline = time.monotonic() + self.poll_interval
-                for spec in list(pending):
+                # Membership by work key: comparing whole spec dicts against a
+                # pending list of thousands made every budget-full scan quadratic.
+                pending_keys = {work_key(spec) for spec in pending}
+                taken = set()
+                batch = []
+                for spec in pending:
                     if time.monotonic() >= deadline:
                         break
                     if (self.root / "state/cancel-request.json").exists():
                         break
-                    if spec not in pending:
+                    key = work_key(spec)
+                    if key in taken:
                         continue
                     profile = spec["runtime_profile"]
                     if (
@@ -720,30 +788,40 @@ class ExecutionEngine:
                         raise PreparationError(
                             f"Zero capacity for observation {work_key(spec)}: {profile}"
                         )
-                    if (
+                    if not (
                         job_count < self.maximum_jobs
                         and used_cpu + profile["native_threads"] <= self.resources["usable_cpus"]
                         and used_memory + profile["memory_bytes"]
                         <= self.resources["worker_memory_budget_bytes"]
                     ):
-                        bundle = bundle_by_key.get(work_key(spec))
-                        selected = (
-                            [row for row in bundle["observations"] if row in pending]
-                            if bundle
-                            else [spec]
-                        )
-                        attempts = (
-                            self._launch_bundle(selected, bundle)
-                            if bundle
-                            else [self._launch(spec)]
-                        )
-                        for row, attempt in zip(selected, attempts):
-                            active[work_key(row)] = (row, attempt)
-                            pending.remove(row)
-                        launched += 1
-                        job_count += 1
-                        used_cpu += profile["native_threads"]
-                        used_memory += profile["memory_bytes"]
+                        continue
+                    bundle = bundle_by_key.get(key)
+                    selected = (
+                        [
+                            row
+                            for row in bundle["observations"]
+                            if work_key(row) in pending_keys and work_key(row) not in taken
+                        ]
+                        if bundle
+                        else [spec]
+                    )
+                    # The budget is reserved before the batch is submitted, so a
+                    # batch never overshoots the job, CPU or memory limits.
+                    taken.update(work_key(row) for row in selected)
+                    batch.append(
+                        self._prepare_bundle(selected, bundle)
+                        if bundle
+                        else self._prepare_launch(spec)
+                    )
+                    job_count += 1
+                    used_cpu += profile["native_threads"]
+                    used_memory += profile["memory_bytes"]
+                    if len(batch) >= self.submit_workers:
+                        launched += self._dispatch_batch(batch, active)
+                if batch:
+                    launched += self._dispatch_batch(batch, active)
+                if taken:
+                    pending[:] = [spec for spec in pending if work_key(spec) not in taken]
                 # Loop straight back while there is a backlog to work off.
                 if active and not launched and not collected:
                     time.sleep(min(self.poll_interval, 30))

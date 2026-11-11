@@ -148,6 +148,15 @@ class SiteConfig:
     # seeds on both arms. Every observation of a big circuit
     # (planner.BIG_CIRCUITS) always gets a job of its own.
     shard_max_observations: int = 6
+    # Controller threads for the two filesystem-bound phases of a dispatch
+    # iteration. Only scheduler submissions (``bsub``, 0.2-0.4 s each) and
+    # result publications (12-20 fsyncs on the shared filesystem, 0.2 s each)
+    # overlap; submission intents, attempt records and the journal stay serial
+    # on the controller thread, so the on-disk protocol a restart adopts is
+    # unchanged. One controller thread held about 55 short shards in flight
+    # regardless of max_jobs.
+    submit_workers: int = 8
+    collect_workers: int = 8
     memory_unit: str = "MB"
     memory_limit_unit: str | None = None
     memory_reservation_unit: str | None = None

@@ -11,6 +11,12 @@ poll_seconds = 20
 visibility_grace_seconds = 900
 job_wall_seconds = 172800
 shard_max_observations = 6
+# Controller threads for bsub calls and for result publication (fsync-bound on
+# GPFS). Measured 2026-11-11: one thread spent ~2.2 s per six-observation shard
+# (1.0-1.5 s publishing results, 0.35 s intents, 0.2-0.4 s bsub) and held only
+# ~55 short shards in flight regardless of max_jobs.
+submit_workers = 8
+collect_workers = 8
 
 memory_unit = "GB"
 memory_per_slot = false

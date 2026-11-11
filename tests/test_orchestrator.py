@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import threading
 import time
 
 import pytest
@@ -102,9 +103,10 @@ def setup(tmp_path, monkeypatch):
 
 def execute(root, config, specs, **options):
     executor = options.pop("executor", None)
+    poll_interval = options.pop("poll_interval", 0.01)
     with Lease(root / "state/controller.lease") as lease:
         engine = ExecutionEngine(root, config, lease, executor=executor, plan_hash="frozen-plan")
-        engine.poll_interval = 0.01
+        engine.poll_interval = poll_interval
         return engine.run(specs, **options)
 
 
@@ -272,26 +274,28 @@ class FakeLSF:
         self.lose_submission = lose_submission
         # Process exit code -> scheduler exit reason reported for that job.
         self.terminations = terminations or {}
+        # The controller submits a dispatch batch from several threads.
+        self.lock = threading.Lock()
 
     def __call__(self, argv, **kwargs):
         if argv[0] == "bsub":
-            self.submissions += 1
-            name = argv[argv.index("-J") + 1]
-            cwd_index = argv.index("-cwd")
-            directory = Path(argv[cwd_index + 1])
-            process = subprocess.Popen(
-                argv[cwd_index + 2 :],
-                cwd=directory,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            self.jobs[str(self.submissions)] = {"name": name, "process": process}
-            if self.lose_submission:
-                self.lose_submission = False
-                raise subprocess.TimeoutExpired(argv, 60)
-            return subprocess.CompletedProcess(
-                argv, 0, f"Job <{self.submissions}> is submitted", ""
-            )
+            with self.lock:
+                self.submissions += 1
+                identity = str(self.submissions)
+                name = argv[argv.index("-J") + 1]
+                cwd_index = argv.index("-cwd")
+                directory = Path(argv[cwd_index + 1])
+                process = subprocess.Popen(
+                    argv[cwd_index + 2 :],
+                    cwd=directory,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+                self.jobs[identity] = {"name": name, "process": process}
+                if self.lose_submission:
+                    self.lose_submission = False
+                    raise subprocess.TimeoutExpired(argv, 60)
+            return subprocess.CompletedProcess(argv, 0, f"Job <{identity}> is submitted", "")
         if argv[0] in {"bjobs", "bhist"}:
             records = []
             for identity, job in self.jobs.items():
@@ -306,6 +310,123 @@ class FakeLSF:
                 records.append(record)
             return subprocess.CompletedProcess(argv, 0, json.dumps({"RECORDS": records}), "")
         raise AssertionError(argv)
+
+
+class Overlap:
+    """Wraps a callable to hold it for ``delay`` seconds and record concurrency."""
+
+    def __init__(self, delay):
+        self.delay = delay
+        self.lock = threading.Lock()
+        self.current = 0
+        self.peak = 0
+
+    def wrap(self, function):
+        def wrapper(*args, **kwargs):
+            with self.lock:
+                self.current += 1
+                self.peak = max(self.peak, self.current)
+            try:
+                time.sleep(self.delay)
+                return function(*args, **kwargs)
+            finally:
+                with self.lock:
+                    self.current -= 1
+
+        return wrapper
+
+
+class SlowFakeLSF(FakeLSF):
+    """FakeLSF whose bsub takes ``delay`` seconds and records scheduler load."""
+
+    def __init__(self, *, delay, **kwargs):
+        super().__init__(**kwargs)
+        self.overlap = Overlap(delay)
+        self.peak_load = 0
+
+    def __call__(self, argv, **kwargs):
+        if argv[0] != "bsub":
+            return super().__call__(argv, **kwargs)
+        with self.lock:
+            running = sum(job["process"].poll() is None for job in self.jobs.values())
+            self.peak_load = max(self.peak_load, running + self.overlap.current + 1)
+        return self.overlap.wrap(super().__call__)(argv, **kwargs)
+
+
+def lsf_site(tmp_path, **options):
+    lines = [f"{key}={value}" for key, value in options.items()]
+    path = tmp_path / "site.toml"
+    path.write_text(
+        '[lsf]\nqueue="fake"\npoll_seconds=0.01\nvisibility_grace_seconds=0.1\n'
+        + "\n".join(lines)
+        + "\n"
+    )
+    return path, SiteConfig.read(path)
+
+
+@pytest.mark.parametrize("submit_workers,overlap", [(1, 1), (4, 2)])
+def test_lsf_submissions_overlap_within_the_job_budget(setup, tmp_path, submit_workers, overlap):
+    specs = []
+    for index in range(6):
+        root, config, spec = setup(identity=f"parallel-{index}", fake_delay=0.5)
+        specs.append(spec)
+    # One job per observation, so six specs mean six bsub calls under a budget of four.
+    site_path, site = lsf_site(
+        tmp_path, max_jobs=4, shard_max_observations=1, submit_workers=submit_workers
+    )
+    config.executor, config.lsf_config = "lsf", str(site_path)
+    scheduler = SlowFakeLSF(delay=0.2)
+    rows = execute(
+        root, config, specs, executor=LSFExecutor(site, runner=scheduler), poll_interval=1.0
+    )
+    assert [row["status"] for row in rows] == ["SUCCEEDED"] * 6
+    assert scheduler.submissions == 6
+    # One worker is the sequential controller; a batch overlaps its bsub calls
+    # but never holds more jobs on the scheduler than max_jobs allows.
+    assert overlap <= scheduler.overlap.peak <= submit_workers
+    assert scheduler.peak_load <= 4
+    for spec in specs:
+        assert len(list((root / "attempts" / work_key(spec)).glob("*/attempt.json"))) == 1
+    events = [json.loads(line) for line in (root / "state/events.jsonl").read_text().splitlines()]
+    submitted = [
+        event["data"]["work_key"] for event in events if event["event_type"] == "submitted"
+    ]
+    assert sorted(submitted) == sorted(work_key(spec) for spec in specs)
+
+
+@pytest.mark.parametrize("collect_workers,overlap", [(1, 1), (4, 2)])
+def test_lsf_results_are_published_in_parallel(
+    setup, tmp_path, monkeypatch, collect_workers, overlap
+):
+    import benchpress_compare.orchestrator as orchestrator
+
+    specs = []
+    for index in range(8):
+        root, config, spec = setup(identity=f"collect-{index}")
+        specs.append(spec)
+    site_path, site = lsf_site(
+        tmp_path, max_jobs=8, shard_max_observations=1, collect_workers=collect_workers
+    )
+    config.executor, config.lsf_config = "lsf", str(site_path)
+    publication = Overlap(0.1)
+    monkeypatch.setattr(
+        orchestrator, "publish_bundle", publication.wrap(orchestrator.publish_bundle)
+    )
+    rows = execute(
+        root, config, specs, executor=LSFExecutor(site, runner=FakeLSF()), poll_interval=1.0
+    )
+    assert [row["status"] for row in rows] == ["SUCCEEDED"] * 8
+    assert overlap <= publication.peak <= collect_workers
+    assert len(read_results(root)) == 8
+    events = [json.loads(line) for line in (root / "state/events.jsonl").read_text().splitlines()]
+    committed = [
+        event["data"]["work_key"] for event in events if event["event_type"] == "result_committed"
+    ]
+    assert sorted(committed) == sorted(work_key(spec) for spec in specs)
+    # The journal chain stays intact when commits are appended from threads.
+    for previous, event in zip(events, events[1:]):
+        assert event["previous"] == previous["event_hash"]
+        assert event["sequence"] == previous["sequence"] + 1
 
 
 def test_lost_lsf_submit_reply_is_reconciled_and_matches_local(setup, tmp_path):
