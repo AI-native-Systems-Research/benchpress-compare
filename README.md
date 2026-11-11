@@ -10,6 +10,8 @@ in the headline scores. Explore results by circuit family, qubit-width band,
 target class and optimization level, with charts, tables,
 and JSON/CSV exports. 
 
+![BenchpressCompare explainer](docs/explainer.gif)
+
 ## Quick start
 
 You need [uv](https://docs.astral.sh/uv/getting-started/installation/), Python
