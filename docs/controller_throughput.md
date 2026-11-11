@@ -12,11 +12,26 @@ The controller is [orchestrator.py](../src/benchpress_compare/orchestrator.py)
 [journal.py](../src/benchpress_compare/journal.py). This document expands
 findings F5 and F34 in [code_review_findings.md](code_review_findings.md).
 
-**Status:** steps 2.1 and 2.2 (including the optional cap on collection, 2.2e,
-at 50 commits per iteration) are implemented on branch `bug_fixes`. The
-journal cache checks a stat signature `(dev, ino, size, mtime_ns)` rather than
-size alone, and the budget computation is `ExecutionEngine._scheduler_load`.
-Step 2.3 is not done. The real-LSF check in section 3 has not been run yet.
+**Current status (2026-11-11):** the analysis below describes the original
+sequential controller. The current loop polls, collects up to 500 observations,
+then dispatches for at most `poll_seconds` (plus completion of its current batch).
+It saves scheduler state only when it changes, submits with `submit_workers`
+threads, and publishes with `collect_workers` threads; both default to 8.
+Journal appends and central-state publications remain serialized by file locks.
+
+The checked-in site configuration already allows 150 jobs and 150 CPUs, with
+a 2,000 GiB worker memory budget. The observed roughly 50-job run used the older
+controller, before commit `903114d`. Use a fresh results directory to run the
+updated controller: requests and plans pin its source hash, so an old run cannot
+resume with this implementation. Keep the existing shared store for reusable
+baseline results.
+
+Concurrency tests cover job, CPU and memory bounds, cancellation during batch
+preparation, interrupted submissions, and concurrent publication under lease
+takeover. Actual sustained LSF occupancy still needs a new cluster run: short
+shards require more frequent replenishment, and filesystem and scheduler latency
+can keep running jobs below the configured ceiling. `max_jobs` includes pending
+and suspended jobs as well as running ones.
 
 ## 1. Diagnosis
 

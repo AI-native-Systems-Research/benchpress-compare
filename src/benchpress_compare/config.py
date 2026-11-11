@@ -191,6 +191,10 @@ class SiteConfig:
         for unit in (cfg.memory_limit_unit, cfg.memory_reservation_unit):
             if unit is not None and unit not in {"KB", "MB", "GB"}:
                 raise CompareError("LSF memory limit/reservation units must be KB, MB, or GB")
+        for key in ("submit_workers", "collect_workers"):
+            value = getattr(cfg, key)
+            if type(value) is not int or value <= 0:
+                raise CompareError(f"LSF {key} must be a positive integer")
         for key, value in asdict(cfg).items():
             if isinstance(value, (int, float)) and not isinstance(value, bool):
                 zero_ok = key == "memory_headroom_gb"

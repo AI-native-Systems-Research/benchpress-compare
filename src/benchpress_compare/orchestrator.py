@@ -354,6 +354,16 @@ class ExecutionEngine:
 
     def _dispatch_batch(self, batch, active):
         """Submit a prepared batch and register its attempts; returns the job count."""
+        if (self.root / "state/cancel-request.json").exists():
+            # Preparation writes durable intents. Retire them before discarding
+            # this batch, otherwise a restart would look for jobs never submitted.
+            # Their specs stay pending so the cancellation loop publishes results.
+            for prepared in batch:
+                for attempt in prepared["attempts"]:
+                    attempt["status"] = "CANCELLED"
+                    self._save_attempt(attempt)
+            batch.clear()
+            return 0
         for prepared, job in zip(batch, self._submit_batch(batch)):
             for spec, attempt in zip(prepared["specs"], self._record_launch(prepared, job)):
                 active[work_key(spec)] = (spec, attempt)
@@ -821,7 +831,9 @@ class ExecutionEngine:
                 if batch:
                     launched += self._dispatch_batch(batch, active)
                 if taken:
-                    pending[:] = [spec for spec in pending if work_key(spec) not in taken]
+                    # Prepared jobs cancelled before submission still need the
+                    # pending-work cancellation path on the next iteration.
+                    pending[:] = [spec for spec in pending if work_key(spec) not in active]
                 # Loop straight back while there is a backlog to work off.
                 if active and not launched and not collected:
                     time.sleep(min(self.poll_interval, 30))

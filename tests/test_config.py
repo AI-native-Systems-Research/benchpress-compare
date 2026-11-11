@@ -40,7 +40,7 @@ def test_site_has_no_implicit_queue(tmp_path):
     assert SiteConfig.read(path).queue == "test"
 
 
-def test_site_controller_threads_default_and_must_be_positive(tmp_path):
+def test_site_controller_threads_defaults_and_overrides(tmp_path):
     path = tmp_path / "site.toml"
     path.write_text('[lsf]\nqueue="test"\n')
     cfg = SiteConfig.read(path)
@@ -48,10 +48,17 @@ def test_site_controller_threads_default_and_must_be_positive(tmp_path):
     path.write_text('[lsf]\nqueue="test"\nsubmit_workers=3\ncollect_workers=1\n')
     cfg = SiteConfig.read(path)
     assert (cfg.submit_workers, cfg.collect_workers) == (3, 1)
-    for key in ("submit_workers", "collect_workers"):
-        path.write_text(f'[lsf]\nqueue="test"\n{key}=0\n')
-        with pytest.raises(CompareError, match=key):
-            SiteConfig.read(path)
+
+
+@pytest.mark.parametrize("key", ["submit_workers", "collect_workers"])
+@pytest.mark.parametrize(
+    "value", ["0", "-1", "1.5", "2.0", "inf", "nan", "true", "false", '"4"', "[]"]
+)
+def test_site_controller_threads_require_positive_integers(tmp_path, key, value):
+    path = tmp_path / "site.toml"
+    path.write_text(f'[lsf]\nqueue="test"\n{key}={value}\n')
+    with pytest.raises(CompareError, match=f"{key} must be a positive integer"):
+        SiteConfig.read(path)
 
 
 @pytest.mark.parametrize("profile,wall", [("evolve", 900), ("small", 60)])

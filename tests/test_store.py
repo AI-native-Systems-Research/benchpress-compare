@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 import json
+import threading
 
 import pytest
 
@@ -69,6 +70,55 @@ def test_lease_exclusion_heartbeat_and_stale_writer_fencing(tmp_path):
     second.assert_owned()
     second.release()
     assert not path.exists()
+
+
+def test_concurrent_publications_are_fenced_after_lease_takeover(tmp_path, monkeypatch):
+    import benchpress_compare.store as store
+
+    # Hold all publishers after their private staging is durable, before they
+    # acquire the shared publication fence. A new controller takes over while
+    # the old controller's collection workers are still finishing their I/O.
+    staged = threading.Barrier(5)
+    publish = threading.Event()
+    fsync_directory = store.fsync_directory
+
+    def pause_staged(path):
+        result = fsync_directory(path)
+        if path.name.startswith(".publish-"):
+            staged.wait(timeout=10)
+            assert publish.wait(timeout=10)
+        return result
+
+    monkeypatch.setattr(store, "fsync_directory", pause_staged)
+    path = tmp_path / "lease"
+    first = Lease(path, heartbeat=False).acquire()
+    second = None
+    destinations = [tmp_path / f"bundle-{index}" for index in range(4)]
+    try:
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            futures = [
+                pool.submit(publish_bundle, destination, {"schema_version": 1}, lease=first)
+                for destination in destinations
+            ]
+            try:
+                staged.wait(timeout=10)
+                expired = json.loads(path.read_text())
+                expired["expires_at"] = 0
+                atomic_write_json(path, expired)
+                second = Lease(path, heartbeat=False).acquire()
+            finally:
+                publish.set()
+            for future in futures:
+                with pytest.raises(LeaseLost):
+                    future.result(timeout=10)
+        assert all(not destination.exists() for destination in destinations)
+        assert not list(tmp_path.glob(".publish-*"))
+        second.assert_owned()
+    finally:
+        publish.set()
+        first.release()
+        if second is not None:
+            second.release()
 
 
 def test_store_only_caches_verified_baseline_and_owns_artifacts(tmp_path):

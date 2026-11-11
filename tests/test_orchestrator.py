@@ -12,10 +12,11 @@ from benchpress_compare.errors import IntegrityError, PreparationError, Reconcil
 from benchpress_compare.executors.local import LocalExecutor, matching_process
 from benchpress_compare.executors.lsf import LSFExecutor
 from benchpress_compare.identity import atomic_write_json, canonical_hash, read_json
+from benchpress_compare.journal import Journal
 from benchpress_compare.orchestrator import ExecutionEngine, cancel, read_results, work_key
 from benchpress_compare.pilot import runtime_profile
 from benchpress_compare.schema import PROTOCOLS
-from benchpress_compare.store import Lease
+from benchpress_compare.store import Lease, Store
 
 
 WORKER = r"""
@@ -401,9 +402,10 @@ def test_lsf_results_are_published_in_parallel(
     import benchpress_compare.orchestrator as orchestrator
 
     specs = []
-    for index in range(8):
-        root, config, spec = setup(identity=f"collect-{index}")
-        specs.append(spec)
+    for index in range(4):
+        for arm in ("baseline", "evolve"):
+            root, config, spec = setup(identity=f"collect-{index}", arm=arm)
+            specs.append(spec)
     site_path, site = lsf_site(
         tmp_path, max_jobs=8, shard_max_observations=1, collect_workers=collect_workers
     )
@@ -412,13 +414,14 @@ def test_lsf_results_are_published_in_parallel(
     monkeypatch.setattr(
         orchestrator, "publish_bundle", publication.wrap(orchestrator.publish_bundle)
     )
+    scheduler = FakeLSF()
     rows = execute(
-        root, config, specs, executor=LSFExecutor(site, runner=FakeLSF()), poll_interval=1.0
+        root, config, specs, executor=LSFExecutor(site, runner=scheduler), poll_interval=1.0
     )
     assert [row["status"] for row in rows] == ["SUCCEEDED"] * 8
     assert overlap <= publication.peak <= collect_workers
     assert len(read_results(root)) == 8
-    events = [json.loads(line) for line in (root / "state/events.jsonl").read_text().splitlines()]
+    events = Journal(root / "state/events.jsonl").replay()
     committed = [
         event["data"]["work_key"] for event in events if event["event_type"] == "result_committed"
     ]
@@ -427,6 +430,53 @@ def test_lsf_results_are_published_in_parallel(
     for previous, event in zip(events, events[1:]):
         assert event["previous"] == previous["event_hash"]
         assert event["sequence"] == previous["sequence"] + 1
+    # A/A observations have equal identities across arms, but only the baseline
+    # may enter the shared cache. A restarted controller must reuse both local
+    # publications without submitting either arm again.
+    store = Store(config.store)
+    for spec in specs:
+        cached = store.get("baseline/observations", spec["observation_id"])
+        assert cached["record"]["arm"] == "baseline"
+    assert execute(root, config, specs, executor=LSFExecutor(site, runner=scheduler)) == rows
+    assert scheduler.submissions == 8
+
+
+def test_parallel_submissions_are_adopted_after_interruption_before_recording(setup, tmp_path):
+    specs = []
+    for index in range(4):
+        root, config, spec = setup(identity=f"unrecorded-{index}")
+        specs.append(spec)
+    site_path, site = lsf_site(tmp_path, max_jobs=4, shard_max_observations=1, submit_workers=4)
+    config.executor, config.lsf_config = "lsf", str(site_path)
+    scheduler = FakeLSF()
+
+    class InterruptedRecording(ExecutionEngine):
+        def _record_launch(self, prepared, job):
+            raise KeyboardInterrupt
+
+    with Lease(root / "state/controller.lease") as lease:
+        engine = InterruptedRecording(
+            root,
+            config,
+            lease,
+            executor=LSFExecutor(site, runner=scheduler),
+            plan_hash="frozen-plan",
+        )
+        engine.poll_interval = 10
+        with pytest.raises(KeyboardInterrupt):
+            engine.run(specs)
+    assert scheduler.submissions == 4
+    for spec in specs:
+        paths = list((root / "attempts" / work_key(spec)).glob("*/attempt.json"))
+        assert len(paths) == 1
+        assert "job" not in read_json(paths[0])
+
+    rows = execute(root, config, specs, executor=LSFExecutor(site, runner=scheduler))
+    assert [row["status"] for row in rows] == ["SUCCEEDED"] * 4
+    assert scheduler.submissions == 4
+    events = Journal(root / "state/events.jsonl").replay()
+    assert sum(event["event_type"] == "attempt_adopted" for event in events) == 4
+    assert sum(event["event_type"] == "result_committed" for event in events) == 4
 
 
 def test_lost_lsf_submit_reply_is_reconciled_and_matches_local(setup, tmp_path):
