@@ -51,7 +51,7 @@ flowchart TD
     end
 
     COL --> AD["Admission from baseline results only<br/>+ exact weights (eligibility.apply_admission)"]
-    AD --> REP["Report: summary.json, report.md, cases.csv, observations.csv"]
+    AD --> REP["Report: summary.json, report.md, charts/*.svg, cases.csv, observations.csv"]
     REP --> EXP["Optional: export archive"]
 ```
 
@@ -274,7 +274,14 @@ N2 and D2 are scored separately:
 Reports are written to `results-root/reports/`:
 - `summary.json`: the authoritative model, including `admission`, `failures` and
   `score_without_evolve_failures`.
-- `report.md`: the readable summary.
+- `report.md`: the readable summary. It leads with the headline scores, then
+  coverage, slices, circuits, the largest changes, failures and diagnostics.
+- `charts/*.svg` and `charts/*.png`: charts drawn from `summary.json` alone
+  and embedded in `report.md` (the PNG, with the SVG linked). All of them show
+  the percent change against baseline, where negative is better: change by
+  slice, circuits better and worse per family, the largest circuit changes, and
+  the spread of circuit changes. The PNGs are rendered with the bundled DejaVu
+  Sans font (`data/fonts/`), so they are identical on every machine.
 - `cases.csv`
 - `observations.csv`
 
@@ -313,7 +320,7 @@ results-root/
   jobs/                    controller and shard job records
   attempts/                one directory per attempt, with spec, receipt and artifacts
   observations/            committed comparison results (one bundle per arm × observation)
-  reports/                 summary.json, report.md, cases.csv, observations.csv
+  reports/                 summary.json, report.md, charts/*.svg|png, cases.csv, observations.csv
 
 store/                     shared across runs
   sources/                 baseline source snapshots

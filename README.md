@@ -80,20 +80,34 @@ uv run benchpress-compare run \
 
 ## Choose a profile
 
-| Profile | Inputs | Targets / optimization levels | Measurements with 3 seeds |
-| --- | ---: | --- | ---: |
-| `small` | 22 | Heavy-hex / L2 | 132 |
-| `evolve` | 44 | Heavy-hex / L2 | 264 |
-| `full` (default) | 147 | Square, heavy-hex, FakeTorino / L2 and L3 | 5,292 |
+All profiles use the same eight circuit families, weights and seeds; they
+differ in how many circuits, targets and levels they cover. `small` is a
+subset of `evolve`, and `evolve` a subset of `full`.
 
-Use `small` to for a short run, `evolve` when using in evolve frameworks like Coral, and `full` to confirm
-results. 
+| | `small` | `evolve` | `full` (default) |
+| --- | --- | --- | --- |
+| Use it for | quick sanity check of a candidate | fitness signal in a search loop | the benchmark; confirming a result |
+| Circuits | 22 | 44 | 147 (136 weighted) |
+| Qubits | 8–64 | 8–129 | 8–129 |
+| Targets | heavy-hex | heavy-hex | square, heavy-hex, FakeTorino |
+| Optimization levels | 2 | 2 | 2 and 3 |
+| Compilations (3 seeds, both arms) | 132 | 264 | 5,292 |
+| Circuits and weights | [small](docs/profiles/small.md) | [evolve](docs/profiles/evolve.md) | [full](docs/profiles/full.md) |
+
+Start with `small`, search with `evolve`, confirm with `full`. 
+
+Each family gets 1/8 of the score. Inside a family the small, medium and large
+bands are weighted 20:30:50 over the bands the family has, then split equally
+over recipes and circuits. 
+
 
 ## Read results
 
 
 When collection finishes, open `<results-root>/reports/report.md` for the readable
-summary. 
+summary. It leads with the headline N2 and D2 scores and embeds the charts
+written to `<results-root>/reports/charts/` as PNG and SVG; `summary.json` next
+to it holds the exact data behind every number.
 
 Some failures change which score you get:
 
@@ -109,13 +123,3 @@ Some failures change which score you get:
   result as a reduced design.
 
 Before trusting a score, check the exclusions and failures listed next to it.
-
-
-## More detail
-
-- Profile specifications: [small](docs/design/benchpress_subset_small_spec.md),
-  [evolve](docs/design/benchpress_subset_evolve_spec.md),
-  [full](docs/design/benchpress_subset_spec.md)
-- All options: `uv run benchpress-compare run --help`
-
-
