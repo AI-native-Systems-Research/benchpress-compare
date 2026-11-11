@@ -215,6 +215,54 @@ def test_unknown_local_submission_is_reconciled_without_duplicate(setup):
     assert read_json(root / "state/status.json")["status"] == "NEEDS_RECONCILIATION"
 
 
+def test_scheduler_load_counts_only_jobs_still_on_the_scheduler():
+    profile = runtime_profile(memory_gb=0.5, wall_seconds=5)
+
+    def attempt(token, status):
+        return {"runtime_profile": profile}, {"job": {"token": token, "status": status}}
+
+    active = {
+        "running": attempt("a", "RUNNING"),
+        "queued": attempt("b", "QUEUED"),
+        "unknown": attempt("c", "SUBMISSION_UNKNOWN"),
+        "shard-1": attempt("d", "NEEDS_RECONCILIATION"),
+        "shard-2": attempt("d", "NEEDS_RECONCILIATION"),
+        "done": attempt("e", "DONE"),
+        "exit": attempt("f", "EXIT"),
+        "cancelled": attempt("g", "CANCELLED"),
+    }
+    jobs, cpus, memory = ExecutionEngine._scheduler_load(active)
+    assert jobs == 4
+    assert cpus == 4 * profile["native_threads"]
+    assert memory == 4 * profile["memory_bytes"]
+
+
+def test_collection_is_interleaved_with_dispatch(setup):
+    # Capacity for every spec at once: a dispatch-first loop would submit all of
+    # them before committing anything. Slow submissions must not hold off commits.
+    specs = []
+    for index in range(4):
+        root, config, spec = setup(identity=f"interleave-{index}")
+        specs.append(spec)
+    config.workers = "4"
+
+    class SlowSubmit(LocalExecutor):
+        def submit(self, *args, **kwargs):
+            job = super().submit(*args, **kwargs)
+            time.sleep(0.2)
+            return job
+
+    rows = execute(root, config, specs, executor=SlowSubmit())
+    assert all(row["status"] == "SUCCEEDED" for row in rows)
+    events = [
+        json.loads(line)["event_type"]
+        for line in (root / "state/events.jsonl").read_text().splitlines()
+    ]
+    first_commit = events.index("result_committed")
+    last_submission = len(events) - 1 - events[::-1].index("submitted")
+    assert first_commit < last_submission
+
+
 class FakeLSF:
     """Scheduler transport that runs real fresh worker subprocesses."""
 

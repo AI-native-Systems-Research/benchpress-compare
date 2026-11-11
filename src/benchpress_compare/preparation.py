@@ -260,6 +260,14 @@ def _builds(engine, snapshots):
         _check_paired_builds(builds)
         return builds
     wheel = _harness_wheel(root / "preparation/harness")
+    job_wall_seconds = engine.site.job_wall_seconds if engine.site else 14400
+    # Dependency resolution downloads and installs packages, so it gets the
+    # job-level wall limit rather than the per-observation ``config.wall_seconds``.
+    resolve_profile = runtime_profile(
+        native_threads=config.native_threads,
+        wall_seconds=job_wall_seconds,
+        memory_gb=config.worker_memory_gb,
+    )
     common = _task(
         engine,
         "resolve-dependencies",
@@ -272,10 +280,11 @@ def _builds(engine, snapshots):
                 "qiskit-ibm-runtime==0.43.1",
             ],
         },
+        profile=resolve_profile,
     )
     build_profile = runtime_profile(
         native_threads=engine.site.build_cpus if engine.site else config.build_cpus,
-        wall_seconds=engine.site.job_wall_seconds if engine.site else 14400,
+        wall_seconds=job_wall_seconds,
         memory_gb=engine.site.build_memory_gb
         if engine.site
         else max(config.worker_memory_gb, 16),

@@ -398,3 +398,32 @@ def test_cached_harness_wheel_must_match_actual_coordinator(tmp_path):
     write_wheel(corrupt_profiles=True)
     with pytest.raises(IntegrityError, match="differs from the running coordinator"):
         _harness_wheel(tmp_path)
+
+
+def test_resolve_dependencies_uses_job_wall_limit_not_observation_wall(tmp_path, monkeypatch):
+    import types
+
+    import benchpress_compare.preparation as module
+
+    captured = []
+
+    class Stop(Exception):
+        pass
+
+    def fake_tasks(engine, requests):
+        captured.extend(module._task_spec(engine, t, f, **o) for t, f, o in requests)
+        raise Stop
+
+    monkeypatch.setattr(module, "_harness_wheel", lambda path: path / "harness.whl")
+    monkeypatch.setattr(module, "_tasks", fake_tasks)
+    cfg = config(tmp_path, wall_seconds=60)
+    engine = types.SimpleNamespace(
+        root=tmp_path / "results",
+        config=cfg,
+        site=SiteConfig(queue="normal", job_wall_seconds=172800),
+    )
+    with pytest.raises(Stop):
+        module._builds(engine, {"baseline": "b", "evolve": "e"})
+    (spec,) = captured
+    assert spec["task"] == "resolve-dependencies"
+    assert spec["runtime_profile"]["wall_seconds"] == 172800

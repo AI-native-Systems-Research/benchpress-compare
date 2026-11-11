@@ -20,6 +20,13 @@ from .pilot import inventory, worker_capacity
 from .schema import TERMINAL, PROTOCOLS, validate_record
 from .store import Lease, Store, publish_bundle, verify_bundle
 
+# Job statuses that no longer hold scheduler resources; their attempts only
+# await validation and commit by the controller.
+SCHEDULER_TERMINAL = frozenset({"DONE", "EXIT", "INFRA_FAILED", "RESOURCE_LIMIT", "CANCELLED"})
+# Bounds the commits per controller iteration so a large batch of finished jobs
+# cannot hold off dispatch; the rest are committed on the next iteration.
+COLLECT_PER_ITERATION = 50
+
 
 def work_key(spec):
     # Equal source builds still require independent real A/A measurements.
@@ -210,6 +217,23 @@ class ExecutionEngine:
             else "benchpress_compare.tasks",
             str(directory / "spec.json"),
         ]
+
+    @staticmethod
+    def _scheduler_load(active):
+        """Jobs, CPUs and memory held on the scheduler by the active attempts.
+
+        Pending, suspended and uncertain jobs count, since they hold or may hold
+        resources; jobs that already ended do not, even before their commit.
+        """
+        owned = {}
+        for spec, attempt in active.values():
+            if attempt["job"]["status"] not in SCHEDULER_TERMINAL:
+                owned.setdefault(attempt["job"]["token"], spec)
+        return (
+            len(owned),
+            sum(spec["runtime_profile"]["native_threads"] for spec in owned.values()),
+            sum(spec["runtime_profile"]["memory_bytes"] for spec in owned.values()),
+        )
 
     def _launch(self, spec):
         attempt = self._new_attempt(spec)
@@ -517,52 +541,13 @@ class ExecutionEngine:
                         publish_bundle(self._result_path(spec), result, lease=self.lease)
                         results[work_key(spec)] = result
                     pending.clear()
-                owned_jobs = {attempt["job"]["token"]: spec for spec, attempt in active.values()}
-                used_cpu = sum(
-                    spec["runtime_profile"]["native_threads"] for spec in owned_jobs.values()
-                )
-                used_memory = sum(
-                    spec["runtime_profile"]["memory_bytes"] for spec in owned_jobs.values()
-                )
-                job_count = len(owned_jobs)
-                for spec in list(pending):
-                    if (self.root / "state/cancel-request.json").exists():
-                        break
-                    if spec not in pending:
-                        continue
-                    profile = spec["runtime_profile"]
-                    if (
-                        profile["native_threads"] > self.resources["usable_cpus"]
-                        or profile["memory_bytes"] > self.resources["worker_memory_budget_bytes"]
-                    ):
-                        raise PreparationError(
-                            f"Zero capacity for observation {work_key(spec)}: {profile}"
-                        )
-                    if (
-                        job_count < self.maximum_jobs
-                        and used_cpu + profile["native_threads"] <= self.resources["usable_cpus"]
-                        and used_memory + profile["memory_bytes"]
-                        <= self.resources["worker_memory_budget_bytes"]
-                    ):
-                        bundle = bundle_by_key.get(work_key(spec))
-                        selected = (
-                            [row for row in bundle["observations"] if row in pending]
-                            if bundle
-                            else [spec]
-                        )
-                        attempts = (
-                            self._launch_bundle(selected, bundle)
-                            if bundle
-                            else [self._launch(spec)]
-                        )
-                        for row, attempt in zip(selected, attempts):
-                            active[work_key(row)] = (row, attempt)
-                            pending.remove(row)
-                        job_count += 1
-                        used_cpu += profile["native_threads"]
-                        used_memory += profile["memory_bytes"]
+                # Each iteration polls, collects, then dispatches, so the budget
+                # sees fresh statuses and an uncertain poll stops dispatch at
+                # once. Collection and dispatch are both bounded so neither phase
+                # can starve the other while the cluster drains or fills.
                 uncertain = []
                 harness_failures = []
+                collected = 0
                 owned = {}
                 for spec, attempt in active.values():
                     owned.setdefault(attempt["job"]["token"], attempt["job"])
@@ -576,14 +561,13 @@ class ExecutionEngine:
                         if job["status"] == "NEEDS_RECONCILIATION" or self.site is None:
                             uncertain.append(key)
                         continue
-                    if job["status"] not in {
-                        "DONE",
-                        "EXIT",
-                        "INFRA_FAILED",
-                        "RESOURCE_LIMIT",
-                        "CANCELLED",
-                    }:
+                    if job["status"] not in SCHEDULER_TERMINAL:
                         continue
+                    if collected >= COLLECT_PER_ITERATION:
+                        # Left in active and excluded from the dispatch budget;
+                        # the next poll returns it without a scheduler query.
+                        continue
+                    collected += 1
                     receipt = Path(attempt["directory"]) / "receipt.json"
                     supervisor_path = Path(attempt["directory"]) / "supervisor.json"
                     supervisor = read_json(supervisor_path) if supervisor_path.exists() else None
@@ -710,7 +694,50 @@ class ExecutionEngine:
                     )
                 if harness_failures:
                     raise PreparationError(f"Worker protocol incompatible: {harness_failures[0]}")
-                if active:
+                job_count, used_cpu, used_memory = self._scheduler_load(active)
+                launched = 0
+                deadline = time.monotonic() + self.poll_interval
+                for spec in list(pending):
+                    if time.monotonic() >= deadline:
+                        break
+                    if (self.root / "state/cancel-request.json").exists():
+                        break
+                    if spec not in pending:
+                        continue
+                    profile = spec["runtime_profile"]
+                    if (
+                        profile["native_threads"] > self.resources["usable_cpus"]
+                        or profile["memory_bytes"] > self.resources["worker_memory_budget_bytes"]
+                    ):
+                        raise PreparationError(
+                            f"Zero capacity for observation {work_key(spec)}: {profile}"
+                        )
+                    if (
+                        job_count < self.maximum_jobs
+                        and used_cpu + profile["native_threads"] <= self.resources["usable_cpus"]
+                        and used_memory + profile["memory_bytes"]
+                        <= self.resources["worker_memory_budget_bytes"]
+                    ):
+                        bundle = bundle_by_key.get(work_key(spec))
+                        selected = (
+                            [row for row in bundle["observations"] if row in pending]
+                            if bundle
+                            else [spec]
+                        )
+                        attempts = (
+                            self._launch_bundle(selected, bundle)
+                            if bundle
+                            else [self._launch(spec)]
+                        )
+                        for row, attempt in zip(selected, attempts):
+                            active[work_key(row)] = (row, attempt)
+                            pending.remove(row)
+                        launched += 1
+                        job_count += 1
+                        used_cpu += profile["native_threads"]
+                        used_memory += profile["memory_bytes"]
+                # Loop straight back while there is a backlog to work off.
+                if active and not launched and not collected:
                     time.sleep(min(self.poll_interval, 30))
         except KeyboardInterrupt:
             if self.site is None:
