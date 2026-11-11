@@ -4,8 +4,8 @@
 queue = "normal"
 
 # Controller dispatch budgets include pending and suspended jobs.
-max_jobs = 100
-max_cpus = 120
+max_jobs = 150
+max_cpus = 150
 max_memory_gb = 2000
 poll_seconds = 20
 visibility_grace_seconds = 900
