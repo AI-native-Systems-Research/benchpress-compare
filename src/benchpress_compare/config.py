@@ -47,7 +47,7 @@ class RunConfig:
     cpu_budget: float | None = None
     memory_gb: float | None = None
     wall_seconds: float | None = None
-    worker_memory_gb: float = 8
+    worker_memory_gb: float = 10
     build_cpus: int = 4
     infrastructure_retries: int = 1
     lsf_config: str | None = None

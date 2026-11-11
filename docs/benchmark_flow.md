@@ -129,7 +129,7 @@ as observations ([tasks.py](../src/benchpress_compare/tasks.py), [worker/](../sr
    gets `--seeds` comparison seeds from phase-separated SHA-256 streams
    ([seeds.py](../src/benchpress_compare/seeds.py)), and every case uses the same
    **runtime profile** taken from the request (`--wall-seconds`,
-   `--worker-memory-gb`, `--native-threads`).
+   `--worker-memory-gb`, 10 GiB by default, `--native-threads`).
 8. Everything above is written to `preparation.json`, a contract that must not
    change on resume.
 

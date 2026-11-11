@@ -93,7 +93,7 @@ def worker_capacity(resources: dict, profile: dict, ready_count: int, workers="a
     return min(ready_count, capacity if workers == "auto" else int(workers))
 
 
-def runtime_profile(*, native_threads=1, wall_seconds=3600, memory_gb=8, machine=None):
+def runtime_profile(*, native_threads=1, wall_seconds=3600, memory_gb=10, machine=None):
     return {
         "schema_version": 1,
         "native_threads": native_threads,
