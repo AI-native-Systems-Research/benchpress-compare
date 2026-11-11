@@ -64,10 +64,15 @@ def _process_tree(job):
                 if child.status() != psutil.STATUS_ZOMBIE:
                     processes[child.pid] = child
                 if child.pid != job.get("pid"):
+                    try:
+                        group = os.getpgid(child.pid)
+                    except ProcessLookupError:
+                        # macOS reports ESRCH for zombies; keep any earlier value.
+                        group = known.get(child.pid, {}).get("process_group")
                     known[child.pid] = {
                         "pid": child.pid,
                         "process_create_time": child.create_time(),
-                        "process_group": os.getpgid(child.pid),
+                        "process_group": group,
                     }
         except psutil.NoSuchProcess:
             continue
@@ -80,6 +85,9 @@ def _group_exists(group):
         return False
     try:
         os.killpg(group, 0)
+        return True
+    except PermissionError:
+        # The group exists (macOS returns EPERM when it holds only zombies).
         return True
     except ProcessLookupError:
         return False
