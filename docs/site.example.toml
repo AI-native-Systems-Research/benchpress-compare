@@ -17,10 +17,9 @@ job_wall_seconds = 86400
 # (also bounded by job_wall_seconds); six is one case, three seeds on both arms.
 # Every observation of a big circuit always gets a job of its own.
 shard_max_observations = 6
-# Controller threads for scheduler submissions (bsub, 0.2-0.4 s each) and for
-# result publications (12-20 fsyncs on the shared filesystem, ~0.2 s each).
-# Intents, attempt records and the journal stay serial. A single thread held
-# only ~55 short shards in flight whatever max_jobs allowed.
+# Controller threads for launch preparation, submission and recording, and for
+# result publication. Private file staging overlaps; replacements stay fenced
+# and journal records sync in batches. Publication also overlaps dispatch.
 submit_workers = 8
 collect_workers = 8
 

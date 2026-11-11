@@ -12,22 +12,53 @@ The controller is [orchestrator.py](../src/benchpress_compare/orchestrator.py)
 [journal.py](../src/benchpress_compare/journal.py). This document expands
 findings F5 and F34 in [code_review_findings.md](code_review_findings.md).
 
-**Current status (2026-11-11):** the analysis below describes the original
-sequential controller. The current loop polls, collects up to 500 observations,
-then dispatches for at most `poll_seconds` (plus completion of its current batch).
-It saves scheduler state only when it changes, submits with `submit_workers`
-threads, and publishes with `collect_workers` threads; both default to 8.
-Journal appends and central-state publications remain serialized by file locks.
+**Current status (2026-11-11):** the numbered analysis below describes the original
+sequential controller. A later live run, `results/full_new_weight_10_seeds`,
+confirmed that commits `903114d` and `577f47f` still underfilled the 150-job budget.
+That run did use eight submission and collection threads. A representative cycle
+submitted 40 shards in 21.27 seconds, spent 16.23 seconds polling/saving/classifying,
+then spent 29.19 seconds publishing results before dispatch resumed. Recent shard
+wall times had a median of 30.2 seconds and mean of 36.3 seconds. Replenishment of
+roughly 0.6–0.75 jobs/s could not sustain 150 such short jobs.
 
-The checked-in site configuration already allows 150 jobs and 150 CPUs, with
-a 2,000 GiB worker memory budget. The observed roughly 50-job run used the older
-controller, before commit `903114d`. Use a fresh results directory to run the
-updated controller: requests and plans pin its source hash, so an old run cannot
+The current implementation addresses those remaining serial costs:
+
+- Prepare, submit and record independent jobs concurrently, within reserved
+  job/CPU/memory budgets. Sync intents once before each submission batch and
+  submitted events once after recording it.
+- Stage and sync attempt files outside the lease fence, then fence their atomic
+  replacement and directory sync. Persist scheduler transitions concurrently
+  before classifying receipts, retaining durable terminal evidence for restart.
+- Publish one bounded batch (up to 500 observations) in the background while
+  dispatch replenishes free slots. Sync successful result events together;
+  publication errors propagate, and workers finish before the lease is released.
+
+`test_controller_throughput.py` models jobs that expire independently of polling,
+with 10 ms file-sync latency and 2.5-second job lifetimes. In the initial
+200-job benchmark under a
+150-job budget, the old implementation reached only 40 concurrent jobs and took
+22.04 seconds; the revised implementation reached 150 and took 6.35–6.83 seconds.
+The longer 600-job benchmark also measured average occupancy while work remained
+queued, excluding initial ramp-up and final drain. With the revised code, a
+2-second simulated poll interval averaged only 89 jobs despite a peak of 150;
+0.5 seconds averaged 127, and 0.2 seconds averaged 134. The regression uses the
+0.2-second interval and checks both peak and sustained occupancy.
+These are simulated scheduler results, not a measurement of the revised code on LSF.
+
+The checked-in site configuration allows 300 jobs and 300 CPUs, with
+a 4,000 GiB worker memory budget. At 10 GiB per worker this leaves room for all
+300 jobs, including their 1 GiB scheduler headroom. It uses 16 submission and
+16 collection threads to replenish the larger job budget. Its poll interval is
+2 seconds instead of 20, limiting the delay between short shards completing and
+their replacement. Capacity and slow-storage throughput regressions cover both
+150 jobs with eight controller threads and 300 jobs with sixteen threads.
+Use a fresh results directory to run the updated
+controller: requests and plans pin its source hash, so an old run cannot
 resume with this implementation. Keep the existing shared store for reusable
 baseline results.
 
 Concurrency tests cover job, CPU and memory bounds, cancellation during batch
-preparation, interrupted submissions, and concurrent publication under lease
+preparation and publication, interrupted submissions, and publication under lease
 takeover. Actual sustained LSF occupancy still needs a new cluster run: short
 shards require more frequent replenishment, and filesystem and scheduler latency
 can keep running jobs below the configured ceiling. `max_jobs` includes pending

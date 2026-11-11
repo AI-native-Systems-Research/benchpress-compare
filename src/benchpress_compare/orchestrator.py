@@ -24,13 +24,18 @@ from .store import Lease, Store, publish_bundle, verify_bundle
 # Job statuses that no longer hold scheduler resources; their attempts only
 # await validation and commit by the controller.
 SCHEDULER_TERMINAL = frozenset({"DONE", "EXIT", "INFRA_FAILED", "RESOURCE_LIMIT", "CANCELLED"})
-# Bounds the commits per controller iteration so a large batch of finished jobs
-# cannot hold off dispatch; the rest are committed on the next iteration. It must
-# stay above the observations one dispatch window can submit (with parallel
-# submission about 50 shards of up to 6 in 20 s), or finished work piles up in
-# `active` faster than it is committed and every later iteration grows longer.
-# With `collect_workers` publications in flight, 500 take about 15 s.
+# Bounds classification and the single background publication batch. Additional
+# terminal attempts retain their durable scheduler state until the next batch;
+# they consume no scheduler budget and need no repeated filesystem writes.
 COLLECT_PER_ITERATION = 500
+
+
+def _parallel(function, items, workers):
+    items = list(items)
+    if len(items) <= 1 or workers == 1:
+        return [function(item) for item in items]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(len(items), workers)) as pool:
+        return list(pool.map(function, items))
 
 
 def work_key(spec):
@@ -179,10 +184,11 @@ class ExecutionEngine:
         return [read_json(path) for path in sorted(parent.glob("*/attempt.json"))]
 
     def _save_attempt(self, attempt):
-        with self.lease.fenced():
-            atomic_write_json(Path(attempt["directory"]) / "attempt.json", attempt)
+        atomic_write_json(
+            Path(attempt["directory"]) / "attempt.json", attempt, fence=self.lease.fenced
+        )
 
-    def _new_attempt(self, spec, *, token=None, shard_directory=None):
+    def _new_attempt(self, spec, *, token=None, shard_directory=None, journal=True):
         attempt_id = uuid.uuid4().hex
         token = token or uuid.uuid4().hex
         directory = self.root / "attempts" / work_key(spec) / attempt_id
@@ -209,11 +215,22 @@ class ExecutionEngine:
             attempt["shard_directory"] = str(shard_directory)
         self._save_attempt(attempt)
         atomic_write_json(directory / "spec.json", run_spec)
-        self.journal.append(
-            "submission_intent",
-            {"work_key": work_key(spec), "attempt_id": attempt_id, "submission_token": token},
-        )
+        if journal:
+            self._record_intents([spec], [attempt])
         return attempt
+
+    def _record_intents(self, specs, attempts):
+        self.journal.append_many(
+            (
+                "submission_intent",
+                {
+                    "work_key": work_key(spec),
+                    "attempt_id": attempt["attempt_id"],
+                    "submission_token": attempt["submission_token"],
+                },
+            )
+            for spec, attempt in zip(specs, attempts)
+        )
 
     @staticmethod
     def _command(spec, directory):
@@ -245,17 +262,15 @@ class ExecutionEngine:
         )
 
     # A launch has three steps. Intents and the shard manifest are recorded
-    # first and the scheduler's reply is attached to every attempt afterwards,
-    # both serially on the controller thread so the journal and attempt files
-    # keep the protocol a restarted controller adopts. Only the submission in
-    # between, which writes the job's own directory and runs `bsub`, overlaps
-    # across a dispatch batch.
+    # first and the scheduler's reply is attached to every attempt afterwards.
+    # Independent files are staged concurrently; renames remain fenced and
+    # journal records are synced once per dispatch batch, with unchanged recovery data.
 
     def _job_name(self, token):
         return f"bpc-{canonical_hash(str(self.root))[:8]}-{token}"
 
     def _prepare_launch(self, spec):
-        attempt = self._new_attempt(spec)
+        attempt = self._new_attempt(spec, journal=False)
         directory = Path(attempt["directory"])
         return {
             "specs": [spec],
@@ -271,7 +286,8 @@ class ExecutionEngine:
         token = uuid.uuid4().hex
         directory = self.root / "jobs/shards" / token
         attempts = [
-            self._new_attempt(spec, token=token, shard_directory=directory) for spec in specs
+            self._new_attempt(spec, token=token, shard_directory=directory, journal=False)
+            for spec in specs
         ]
         profile = dict(specs[0]["runtime_profile"])
         if any(spec["runtime_profile"] != profile for spec in specs):
@@ -319,11 +335,7 @@ class ExecutionEngine:
         )
 
     def _submit_batch(self, batch):
-        if len(batch) == 1 or self.submit_workers == 1:
-            return [self._submit(prepared) for prepared in batch]
-        workers = min(len(batch), self.submit_workers)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-            return list(pool.map(self._submit, batch))
+        return _parallel(self._submit, batch, self.submit_workers)
 
     def _record_launch(self, prepared, job):
         specs, attempts, bundle = prepared["specs"], prepared["attempts"], prepared["bundle"]
@@ -338,54 +350,97 @@ class ExecutionEngine:
         for spec, attempt in zip(specs, attempts):
             attempt.update(job=job, status=job["status"])
             self._save_attempt(attempt)
-            data = {"work_key": work_key(spec), "attempt_id": attempt["attempt_id"], "job": job}
-            if bundle is not None:
-                data["bundle_id"] = bundle.get("bundle_id")
-            self.journal.append("submitted", data)
         return attempts
+
+    def _record_submissions(self, prepared_batch):
+        events = []
+        for prepared in prepared_batch:
+            for spec, attempt in zip(prepared["specs"], prepared["attempts"]):
+                data = {
+                    "work_key": work_key(spec),
+                    "attempt_id": attempt["attempt_id"],
+                    "job": attempt["job"],
+                }
+                if prepared["bundle"] is not None:
+                    data["bundle_id"] = prepared["bundle"].get("bundle_id")
+                events.append(("submitted", data))
+        self.journal.append_many(events)
 
     def _launch(self, spec):
         prepared = self._prepare_launch(spec)
-        return self._record_launch(prepared, self._submit(prepared))[0]
+        self._record_intents(prepared["specs"], prepared["attempts"])
+        attempts = self._record_launch(prepared, self._submit(prepared))
+        self._record_submissions([prepared])
+        return attempts[0]
 
     def _launch_bundle(self, specs, bundle):
         prepared = self._prepare_bundle(specs, bundle)
-        return self._record_launch(prepared, self._submit(prepared))
+        self._record_intents(prepared["specs"], prepared["attempts"])
+        attempts = self._record_launch(prepared, self._submit(prepared))
+        self._record_submissions([prepared])
+        return attempts
 
     def _dispatch_batch(self, batch, active):
-        """Submit a prepared batch and register its attempts; returns the job count."""
+        """Prepare, submit and record reserved jobs; returns the submitted count."""
+        if (self.root / "state/cancel-request.json").exists():
+            batch.clear()
+            return 0
+        prepared_batch = _parallel(
+            lambda item: self._prepare_bundle(*item)
+            if item[1]
+            else self._prepare_launch(item[0][0]),
+            batch,
+            self.submit_workers,
+        )
+        self._record_intents(
+            [spec for prepared in prepared_batch for spec in prepared["specs"]],
+            [attempt for prepared in prepared_batch for attempt in prepared["attempts"]],
+        )
         if (self.root / "state/cancel-request.json").exists():
             # Preparation writes durable intents. Retire them before discarding
             # this batch, otherwise a restart would look for jobs never submitted.
             # Their specs stay pending so the cancellation loop publishes results.
-            for prepared in batch:
+            for prepared in prepared_batch:
                 for attempt in prepared["attempts"]:
                     attempt["status"] = "CANCELLED"
                     self._save_attempt(attempt)
             batch.clear()
             return 0
-        for prepared, job in zip(batch, self._submit_batch(batch)):
-            for spec, attempt in zip(prepared["specs"], self._record_launch(prepared, job)):
+        jobs = self._submit_batch(prepared_batch)
+        recorded = _parallel(
+            lambda item: self._record_launch(*item),
+            zip(prepared_batch, jobs),
+            self.submit_workers,
+        )
+        self._record_submissions(prepared_batch)
+        for prepared, attempts in zip(prepared_batch, recorded):
+            for spec, attempt in zip(prepared["specs"], attempts):
                 active[work_key(spec)] = (spec, attempt)
         count = len(batch)
         batch.clear()
         return count
 
     def _commit_batch(self, ready):
-        """Commit collected results, overlapping their publication.
+        """Publish independently, then sync the batch's journal events together."""
+        if self.collect_workers == 1:
+            return [self._commit(*item) for item in ready]
 
-        Each commit publishes one immutable bundle (and a store copy for
-        baseline results): a dozen or more fsyncs on the shared filesystem,
-        about 0.2 s each, which was two thirds of the controller's time per
-        shard. Every shared write inside `_commit` (bundle rename, attempt
-        record, journal append, store lease) is already serialised by a file
-        lock, so the publications only overlap their staging and syncing.
-        """
-        if len(ready) <= 1 or self.collect_workers == 1:
-            return [self._commit(spec, attempt, result) for spec, attempt, result in ready]
-        workers = min(len(ready), self.collect_workers)
-        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-            return list(pool.map(lambda item: self._commit(*item), ready))
+        def commit(item):
+            try:
+                return self._commit(*item, journal=False), None
+            except BaseException as error:
+                return None, error
+
+        completed = _parallel(commit, ready, self.collect_workers)
+        self.journal.append_many(
+            self._commit_event(*item)
+            for item, (record, error) in zip(ready, completed)
+            if error is None
+        )
+        for record, error in completed:
+            if error is not None:
+                raise error
+        return [record for record, error in completed]
 
     def _adopt(self, spec, attempts):
         live = [a for a in attempts if a["status"] not in TERMINAL | {"INTERRUPTED", "SUPERSEDED"}]
@@ -422,7 +477,7 @@ class ExecutionEngine:
         )
         return attempt
 
-    def _commit(self, spec, attempt, result):
+    def _commit(self, spec, attempt, result, *, journal=True):
         self._check_identity(spec, result, attempt=attempt if result.get("attempt_id") else None)
         directory = Path(attempt["directory"])
         artifacts = {}
@@ -468,7 +523,13 @@ class ExecutionEngine:
                 raise IntegrityError("Conflicting baseline result for immutable observation")
         attempt["status"] = result["status"]
         self._save_attempt(attempt)
-        self.journal.append(
+        if journal:
+            self.journal.append(*self._commit_event(spec, attempt, result))
+        return result
+
+    @staticmethod
+    def _commit_event(spec, attempt, result):
+        return (
             "result_committed",
             {
                 "work_key": work_key(spec),
@@ -476,7 +537,6 @@ class ExecutionEngine:
                 "attempt_id": attempt["attempt_id"],
             },
         )
-        return result
 
     def _failed_result(self, spec, attempt, status, reason):
         return {
@@ -585,12 +645,33 @@ class ExecutionEngine:
                     results[key] = self._commit(spec, attempt, result)
                 else:
                     pending.append(spec)
+        publication_pool = (
+            concurrent.futures.ThreadPoolExecutor(max_workers=1)
+            if self.collect_workers > 1
+            else None
+        )
+        publication = None
+        publishing = []
+        publishing_keys = set()
         try:
             while pending or active:
                 self.lease.assert_owned()
+                if publication is not None and publication.done():
+                    for (key, spec, attempt, result), record in zip(
+                        publishing, publication.result()
+                    ):
+                        results[key] = record
+                        del active[key]
+                    publication = None
+                    publishing = []
+                    publishing_keys.clear()
                 if (self.root / "state/cancel-request.json").exists():
                     cancelled_jobs = {}
                     for key, (spec, attempt) in list(active.items()):
+                        if key in publishing_keys:
+                            # This job already ended. Its publication owns the
+                            # attempt until the background batch completes.
+                            continue
                         if not attempt.get("cancel_requested"):
                             token = attempt["job"]["token"]
                             if token not in cancelled_jobs:
@@ -612,19 +693,22 @@ class ExecutionEngine:
                         publish_bundle(self._result_path(spec), result, lease=self.lease)
                         results[work_key(spec)] = result
                     pending.clear()
-                # Each iteration polls, collects, then dispatches, so the budget
-                # sees fresh statuses and an uncertain poll stops dispatch at
-                # once. Collection and dispatch are both bounded so neither phase
-                # can starve the other while the cluster drains or fills.
+                # Poll and classify before dispatch. Publication can continue in
+                # the background; keep at most one bounded batch in flight.
                 uncertain = []
                 harness_failures = []
                 collected = 0
                 ready = []
                 owned = {}
-                for spec, attempt in active.values():
+                for key, (spec, attempt) in active.items():
+                    if key in publishing_keys:
+                        continue
                     owned.setdefault(attempt["job"]["token"], attempt["job"])
                 polled_jobs = self.executor.poll_many(owned) if owned else {}
+                changed_attempts = []
                 for key, (spec, attempt) in list(active.items()):
+                    if key in publishing_keys:
+                        continue
                     token = attempt["job"]["token"]
                     job = dict(polled_jobs[token])
                     # Persist only scheduler changes: finished work waiting past the
@@ -633,12 +717,21 @@ class ExecutionEngine:
                     changed = attempt.get("job") != job or attempt.get("status") != job["status"]
                     attempt.update(job=job, status=job["status"])
                     if changed:
-                        self._save_attempt(attempt)
+                        changed_attempts.append(attempt)
+                # Keep terminal scheduler evidence durable before classifying or
+                # publishing. Only private staging/fsyncs overlap across attempts.
+                _parallel(self._save_attempt, changed_attempts, self.collect_workers)
+                for key, (spec, attempt) in list(active.items()):
+                    if key in publishing_keys:
+                        continue
+                    job = attempt["job"]
                     if job["status"] in {"NEEDS_RECONCILIATION", "SUBMISSION_UNKNOWN"}:
                         if job["status"] == "NEEDS_RECONCILIATION" or self.site is None:
                             uncertain.append(key)
                         continue
                     if job["status"] not in SCHEDULER_TERMINAL:
+                        continue
+                    if publication is not None:
                         continue
                     if collected >= COLLECT_PER_ITERATION:
                         # Left in active and excluded from the dispatch budget;
@@ -761,12 +854,23 @@ class ExecutionEngine:
                             del active[key]
                             continue
                     ready.append((key, spec, attempt, result))
-                committed = self._commit_batch([item[1:] for item in ready])
-                for (key, spec, attempt, result), record in zip(ready, committed):
-                    results[key] = record
-                    del active[key]
-                    if result["status"] == "HARNESS_FAILED":
-                        harness_failures.append(result.get("reason", key))
+                harness_failures = [
+                    result.get("reason", key)
+                    for key, spec, attempt, result in ready
+                    if result["status"] == "HARNESS_FAILED"
+                ]
+                if ready:
+                    if publication_pool is not None:
+                        publishing = ready
+                        publishing_keys = {item[0] for item in ready}
+                        publication = publication_pool.submit(
+                            self._commit_batch, [item[1:] for item in ready]
+                        )
+                    else:
+                        committed = self._commit_batch([item[1:] for item in ready])
+                        for (key, spec, attempt, result), record in zip(ready, committed):
+                            results[key] = record
+                            del active[key]
                 if uncertain:
                     self.state("NEEDS_RECONCILIATION", affected=uncertain)
                     raise ReconciliationError(
@@ -783,6 +887,10 @@ class ExecutionEngine:
                 taken = set()
                 batch = []
                 for spec in pending:
+                    if publication is not None and publication.done():
+                        # Surface a failed background publication before preparing
+                        # more jobs, even inside a long dispatch window.
+                        publication.result()
                     if time.monotonic() >= deadline:
                         break
                     if (self.root / "state/cancel-request.json").exists():
@@ -818,11 +926,7 @@ class ExecutionEngine:
                     # The budget is reserved before the batch is submitted, so a
                     # batch never overshoots the job, CPU or memory limits.
                     taken.update(work_key(row) for row in selected)
-                    batch.append(
-                        self._prepare_bundle(selected, bundle)
-                        if bundle
-                        else self._prepare_launch(spec)
-                    )
+                    batch.append((selected, bundle))
                     job_count += 1
                     used_cpu += profile["native_threads"]
                     used_memory += profile["memory_bytes"]
@@ -836,7 +940,10 @@ class ExecutionEngine:
                     pending[:] = [spec for spec in pending if work_key(spec) not in active]
                 # Loop straight back while there is a backlog to work off.
                 if active and not launched and not collected:
-                    time.sleep(min(self.poll_interval, 30))
+                    if publication is not None:
+                        concurrent.futures.wait([publication], timeout=min(self.poll_interval, 30))
+                    else:
+                        time.sleep(min(self.poll_interval, 30))
         except KeyboardInterrupt:
             if self.site is None:
                 for spec, attempt in active.values():
@@ -845,6 +952,11 @@ class ExecutionEngine:
                     self._save_attempt(attempt)
             self.state("INTERRUPTED")
             raise
+        finally:
+            # Workers must finish (or fail behind the fence) before the caller
+            # releases the controller lease, including cancellation and errors.
+            if publication_pool is not None:
+                publication_pool.shutdown(wait=True)
         return [results[key] for key in keys]
 
 

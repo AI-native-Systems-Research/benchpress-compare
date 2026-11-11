@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from contextlib import nullcontext
 from dataclasses import asdict, is_dataclass
 from enum import Enum
 from fractions import Fraction
@@ -78,7 +79,14 @@ def fsync_directory(path: str | Path) -> None:
             raise
 
 
-def atomic_write_json(path: str | Path, value) -> None:
+def atomic_write_json(path: str | Path, value, *, fence=None) -> None:
+    """Stage durable JSON privately, then publish under an optional fence.
+
+    ``fence`` is a context-manager factory, such as ``lease.fenced``. It is
+    entered only after the temporary file has been serialized and synced, so
+    independent writes can stage concurrently while ownership still protects
+    the replacement and its directory sync.
+    """
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     data = canonical_bytes(value) + b"\n"
@@ -88,8 +96,9 @@ def atomic_write_json(path: str | Path, value) -> None:
             stream.write(data)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(name, path)
-        fsync_directory(path.parent)
+        with fence() if fence is not None else nullcontext():
+            os.replace(name, path)
+            fsync_directory(path.parent)
     finally:
         Path(name).unlink(missing_ok=True)
 

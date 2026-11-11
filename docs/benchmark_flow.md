@@ -171,11 +171,14 @@ observation:
    observations are always measured fresh.
 2. **Adopt or launch**: live attempts from an earlier run are adopted, not
    duplicated. Otherwise a new attempt directory with `spec.json` is created and
-   submitted. On LSF the controller submits up to `submit_workers` jobs of one
-   dispatch pass concurrently and publishes up to `collect_workers` finished
-   results concurrently (both default 8); the submission intents, attempt
-   records and the journal are still written serially, so a restarted
-   controller adopts exactly the same on-disk state as before.
+   submitted. On LSF the controller prepares, submits and records up to
+   `submit_workers` jobs concurrently, and publishes up to `collect_workers`
+   finished results concurrently (both default 8). Publication proceeds while
+   dispatch fills free slots. Independent files are staged and synced in
+   parallel; replacement stays lease-fenced. Journal events keep their individual
+   hash chains but sync once per dispatch or publication batch. All intents are
+   durable before submission, and terminal scheduler state is durable before
+   collection, preserving restart adoption.
 3. **Executors**:
    - [executors/local.py](../src/benchpress_compare/executors/local.py) runs each
      attempt as a fresh process group with a process-tree watchdog and resource

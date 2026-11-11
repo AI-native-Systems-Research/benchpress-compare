@@ -10,12 +10,25 @@ from benchpress_compare.store import Lease
 
 
 @pytest.mark.parametrize(
-    "max_cpus,max_memory_gb,native_threads,max_jobs,submit_workers,count,capacity",
-    [(4, 10, 2, 8, 4, 6, 2), (20, 0.5, 1, 8, 4, 6, 2), (150, 2000, 1, 150, 8, 166, 150)],
-    ids=["cpu-bound", "memory-bound", "150-jobs"],
+    "max_cpus,max_memory_gb,native_threads,max_jobs,submit_workers,count,capacity,worker_memory_gb",
+    [
+        (4, 10, 2, 8, 4, 6, 2, 0.25),
+        (20, 0.5, 1, 8, 4, 6, 2, 0.25),
+        (150, 2000, 1, 150, 8, 166, 150, 0.25),
+        (300, 4000, 1, 300, 16, 316, 300, 10),
+    ],
+    ids=["cpu-bound", "memory-bound", "150-jobs", "300-jobs"],
 )
 def test_parallel_submissions_fill_capacity_without_overshooting_budgets(
-    tmp_path, max_cpus, max_memory_gb, native_threads, max_jobs, submit_workers, count, capacity
+    tmp_path,
+    max_cpus,
+    max_memory_gb,
+    native_threads,
+    max_jobs,
+    submit_workers,
+    count,
+    capacity,
+    worker_memory_gb,
 ):
     site = tmp_path / "site.toml"
     site.write_text(
@@ -32,7 +45,7 @@ def test_parallel_submissions_fill_capacity_without_overshooting_budgets(
         executor="lsf",
         lsf_config=str(site),
     )
-    profile = runtime_profile(native_threads=native_threads, memory_gb=0.25)
+    profile = runtime_profile(native_threads=native_threads, memory_gb=worker_memory_gb)
     specs = [
         {
             "schema_version": 1,
@@ -60,8 +73,8 @@ def test_parallel_submissions_fill_capacity_without_overshooting_budgets(
                 assert len(self.live) <= max_jobs
                 assert sum(p["native_threads"] for p in self.live.values()) <= max_cpus
                 assert sum(p["memory_bytes"] for p in self.live.values()) <= max_memory_gb * 1024**3
-            # Require submissions to overlap in pairs. The 150-job case uses
-            # eight controller threads, independent of scheduler concurrency.
+            # Require submissions to overlap in pairs. Controller thread counts
+            # remain independent of the 150- and 300-job scheduler capacities.
             self.pair.wait(timeout=5)
             spec = read_json(directory / "spec.json")
             atomic_write_json(directory / "receipt.json", {**spec, "status": "SUCCEEDED"})
@@ -71,8 +84,12 @@ def test_parallel_submissions_fill_capacity_without_overshooting_budgets(
             # Jobs keep their resources until the controller polls, even after
             # submit returns, so later submissions cannot escape the budget.
             with self.lock:
-                assert set(jobs) == set(self.live)
-                self.poll_loads.append(len(self.live))
+                # Terminal jobs can wait for the previous publication batch.
+                assert {token for token, job in jobs.items() if job["status"] != "DONE"} == set(
+                    self.live
+                )
+                if self.live:
+                    self.poll_loads.append(len(self.live))
                 self.live.clear()
             return {token: {**job, "status": "DONE"} for token, job in jobs.items()}
 

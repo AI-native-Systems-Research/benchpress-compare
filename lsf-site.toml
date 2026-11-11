@@ -4,19 +4,21 @@
 queue = "normal"
 
 # Controller dispatch budgets include pending and suspended jobs.
-max_jobs = 150
-max_cpus = 150
-max_memory_gb = 2000
-poll_seconds = 20
+max_jobs = 300
+max_cpus = 300
+# 300 one-CPU workers at 10 GiB each, with room for scheduler headroom.
+max_memory_gb = 4000
+# Most short shards finish in about 30 s. Refill within 2 s of completion,
+# rather than allowing a 20 s idle gap between scheduler polls.
+poll_seconds = 2
 visibility_grace_seconds = 900
 job_wall_seconds = 172800
 shard_max_observations = 6
-# Controller threads for bsub calls and for result publication (fsync-bound on
-# GPFS). Measured 2026-11-11: one thread spent ~2.2 s per six-observation shard
-# (1.0-1.5 s publishing results, 0.35 s intents, 0.2-0.4 s bsub) and held only
-# ~55 short shards in flight regardless of max_jobs.
-submit_workers = 8
-collect_workers = 8
+# Controller threads for preparation, bsub and recording, and for publication.
+# Private file staging overlaps; replacements stay fenced and journal records
+# sync in batches. Publication proceeds while dispatch fills free slots.
+submit_workers = 16
+collect_workers = 16
 
 memory_unit = "GB"
 memory_per_slot = false
