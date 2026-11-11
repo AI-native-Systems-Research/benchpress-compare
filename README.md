@@ -1,8 +1,14 @@
-# Benchpress Compare
+# BenchpressCompare
 
 Compare two Qiskit source versions on the same circuits, targets, and random
 seeds. The report measures **native two-qubit gate count (N2)** and **two-qubit
 depth (D2)** separately. Scores are `evolve / baseline`: below 1 is better.
+
+Built on the Benchpress circuit corpus, BenchpressCompare adds a balanced
+comparison and analysis layer: each of eight circuit families gets equal weight
+in the headline scores. Explore results by circuit family, qubit-width band,
+target class and optimization level, with charts, tables,
+and JSON/CSV exports. 
 
 ## Quick start
 
@@ -20,9 +26,9 @@ Run these commands from this repository. Replace the source paths with yours.
 uv sync --locked
 ```
 
-### 2. Download BenchPress
+### 2. Download Benchpress
 
-[Qiskit BenchPress](https://github.com/Qiskit/benchpress) supplies the benchmark
+[Qiskit Benchpress](https://github.com/Qiskit/benchpress) supplies the benchmark
 circuits and generator recipes. **Its assets must be downloaded separately;
 they are not included in this repository.** Use this exact revision:
 
