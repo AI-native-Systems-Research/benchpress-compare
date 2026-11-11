@@ -72,6 +72,40 @@ def _verify_harness_wheel(wheel):
     return wheel
 
 
+def _harness_requirements(wheel):
+    """Runtime requirements the harness wheel declares, excluding optional extras.
+
+    Every build installs the harness wheel with ``--no-deps`` into the arm's
+    environment and then proves the environment complete with ``uv pip check``,
+    so the common dependency lock must satisfy these. Reading the wheel's own
+    metadata keeps the lock in step with ``pyproject.toml`` instead of relying
+    on a second, hand-maintained copy of the dependency list.
+    """
+    import email.parser
+    import re
+    import zipfile
+
+    try:
+        with zipfile.ZipFile(wheel) as archive:
+            names = [
+                name
+                for name in archive.namelist()
+                if name.endswith(".dist-info/METADATA") and name.count("/") == 1
+            ]
+            if len(names) != 1:
+                raise IntegrityError("Harness wheel must carry exactly one METADATA file")
+            metadata = email.parser.Parser().parsestr(archive.read(names[0]).decode("utf-8"))
+    except (OSError, UnicodeDecodeError, zipfile.BadZipFile) as exc:
+        raise IntegrityError(f"Cannot read harness wheel metadata: {exc}") from exc
+    requirements = set()
+    for requirement in metadata.get_all("Requires-Dist") or []:
+        _, _, marker = requirement.partition(";")
+        if re.search(r"\bextra\s*==", marker):
+            continue
+        requirements.add(requirement.strip())
+    return sorted(requirements)
+
+
 def _harness_wheel(destination):
     destination = Path(destination)
     destination.mkdir(parents=True, exist_ok=True)
@@ -274,11 +308,12 @@ def _builds(engine, snapshots):
         {
             "snapshots": list(snapshots.values()),
             "destination": str(root / "preparation/dependencies"),
-            "extra_requirements": [
-                "psutil==7.1.3",
-                "jsonschema==4.25.1",
-                "qiskit-ibm-runtime==0.43.1",
-            ],
+            # Workers import the harness wheel, so the lock must carry its
+            # declared runtime dependencies; qiskit-ibm-runtime supplies the
+            # fake backend targets.
+            "extra_requirements": sorted(
+                {*_harness_requirements(wheel), "qiskit-ibm-runtime==0.43.1"}
+            ),
         },
         profile=resolve_profile,
     )

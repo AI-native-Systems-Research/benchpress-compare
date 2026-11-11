@@ -22,6 +22,19 @@ from benchpress_compare.config import SiteConfig
 from benchpress_compare.planner import BIG_CIRCUITS
 
 
+def write_harness_wheel(path, requires=("psutil==7.1.3",)):
+    """A minimal harness wheel whose METADATA declares ``requires``."""
+    import zipfile
+
+    metadata = "Metadata-Version: 2.4\nName: benchpress-compare\nVersion: 0.1.0\n"
+    metadata += "".join(f"Requires-Dist: {requirement}\n" for requirement in requires)
+    metadata += "\nLong description body.\n"
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("benchpress_compare/__init__.py", "")
+        archive.writestr("benchpress_compare-0.1.0.dist-info/METADATA", metadata)
+    return path
+
+
 def config(tmp_path, **kwargs):
     sources = []
     for arm in ("baseline", "evolve"):
@@ -414,7 +427,8 @@ def test_resolve_dependencies_uses_job_wall_limit_not_observation_wall(tmp_path,
         captured.extend(module._task_spec(engine, t, f, **o) for t, f, o in requests)
         raise Stop
 
-    monkeypatch.setattr(module, "_harness_wheel", lambda path: path / "harness.whl")
+    wheel = write_harness_wheel(tmp_path / "harness.whl")
+    monkeypatch.setattr(module, "_harness_wheel", lambda path: wheel)
     monkeypatch.setattr(module, "_tasks", fake_tasks)
     cfg = config(tmp_path, wall_seconds=60)
     engine = types.SimpleNamespace(
@@ -427,3 +441,63 @@ def test_resolve_dependencies_uses_job_wall_limit_not_observation_wall(tmp_path,
     (spec,) = captured
     assert spec["task"] == "resolve-dependencies"
     assert spec["runtime_profile"]["wall_seconds"] == 172800
+
+
+def test_resolve_dependencies_covers_harness_runtime_requirements(tmp_path, monkeypatch):
+    """Builds install the harness wheel with ``--no-deps`` and then run ``uv pip check``.
+
+    The common lock therefore has to carry every runtime dependency the wheel
+    declares, taken from the wheel itself rather than a hand-maintained copy;
+    optional extras stay out of the worker environments.
+    """
+    import types
+
+    import benchpress_compare.preparation as module
+
+    captured = []
+
+    class Stop(Exception):
+        pass
+
+    def fake_tasks(engine, requests):
+        captured.extend(module._task_spec(engine, t, f, **o) for t, f, o in requests)
+        raise Stop
+
+    wheel = write_harness_wheel(
+        tmp_path / "harness.whl",
+        [
+            "resvg-py==0.5.0",
+            "psutil==7.1.3",
+            "jsonschema==4.25.1",
+            'pytest==8.4.2; extra == "dev"',
+            'ruff==0.14.4 ; extra=="dev"',
+        ],
+    )
+    monkeypatch.setattr(module, "_harness_wheel", lambda path: wheel)
+    monkeypatch.setattr(module, "_tasks", fake_tasks)
+    engine = types.SimpleNamespace(root=tmp_path / "results", config=config(tmp_path), site=None)
+    with pytest.raises(Stop):
+        module._builds(engine, {"baseline": "b", "evolve": "e"})
+    (spec,) = captured
+    assert spec["task"] == "resolve-dependencies"
+    assert spec["extra_requirements"] == [
+        "jsonschema==4.25.1",
+        "psutil==7.1.3",
+        "qiskit-ibm-runtime==0.43.1",
+        "resvg-py==0.5.0",
+    ]
+
+
+def test_harness_requirements_need_readable_wheel_metadata(tmp_path):
+    import zipfile
+
+    from benchpress_compare.preparation import _harness_requirements
+
+    assert _harness_requirements(write_harness_wheel(tmp_path / "ok.whl", [])) == []
+    without_metadata = tmp_path / "bare.whl"
+    with zipfile.ZipFile(without_metadata, "w") as archive:
+        archive.writestr("benchpress_compare/__init__.py", "")
+    with pytest.raises(IntegrityError, match="exactly one METADATA"):
+        _harness_requirements(without_metadata)
+    with pytest.raises(IntegrityError, match="Cannot read harness wheel metadata"):
+        _harness_requirements(tmp_path / "missing.whl")
