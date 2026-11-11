@@ -20,7 +20,7 @@ def parser():
     commands = root.add_subparsers(
         dest="command",
         required=True,
-        metavar="{run,prepare,resume,status,report,cancel,export,audit}",
+        metavar="{run,prepare,resume,status,result,report,cancel,export,audit}",
     )
     for name in ("run", "prepare", "resume", "_controller"):
         command = commands.add_parser(
@@ -59,8 +59,15 @@ def parser():
             command.add_argument("--retry-cancelled", action="store_true")
         if name == "_controller":
             command.add_argument("--prepare-only", action="store_true")
-    for name in ("status", "cancel", "export", "report"):
-        command = commands.add_parser(name)
+    for name in ("status", "result", "cancel", "export", "report"):
+        command = commands.add_parser(
+            name,
+            **(
+                {"help": "Print the small result JSON (N2, D2 and the run state)"}
+                if name == "result"
+                else {}
+            ),
+        )
         command.add_argument("--results-root", required=True)
         if name == "export":
             command.add_argument("--output", required=True)
@@ -162,6 +169,10 @@ def main(argv=None):
             from .orchestrator import status
 
             _json(status(args.results_root))
+        elif args.command == "result":
+            from .report import read_result
+
+            _json(read_result(args.results_root))
         elif args.command == "cancel":
             from .orchestrator import cancel
 

@@ -15,6 +15,7 @@ from ..identity import atomic_write_json, fsync_directory
 from .charts import build_charts
 from .markdown import render_markdown
 from .raster import RasterUnavailable, render_png
+from .result import build_result, read_run_state
 
 CASE_FIELDS = (
     "case_id",
@@ -62,12 +63,16 @@ MANAGED_SUFFIXES = (".svg", ".png")
 
 
 def write_report(results_root: str | Path, report: dict) -> dict[str, str]:
-    """Write summary.json, charts, report.md and the CSV views; return their paths."""
+    """Write summary.json, result.json, charts, report.md and the CSV views; return their paths."""
     destination = Path(results_root) / "reports"
     destination.mkdir(parents=True, exist_ok=True)
     # Serialization first rejects accidental NaN/Infinity in any authoritative field.
     json.dumps(report, allow_nan=False)
     atomic_write_json(destination / "summary.json", report)
+    # The live run state decides whether the scores may be read yet.
+    atomic_write_json(
+        destination / "result.json", build_result(report, read_run_state(results_root))
+    )
     vectors, images, raster_note = _write_charts(destination / "charts", build_charts(report))
     embedded = {
         name: f"charts/{name}.png" if name in images else f"charts/{name}.svg" for name in vectors
@@ -83,7 +88,7 @@ def write_report(results_root: str | Path, report: dict) -> dict[str, str]:
     _atomic_text(destination / "observations.csv", _csv(OBSERVATION_FIELDS, report["observations"]))
     paths = {
         name: str(destination / name)
-        for name in ("report.md", "summary.json", "cases.csv", "observations.csv")
+        for name in ("report.md", "summary.json", "result.json", "cases.csv", "observations.csv")
     }
     paths.update({f"charts/{name}.svg": str(path) for name, path in vectors.items()})
     paths.update({f"charts/{name}.png": str(path) for name, path in images.items()})

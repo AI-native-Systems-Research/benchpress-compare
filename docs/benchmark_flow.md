@@ -102,8 +102,10 @@ never compiles a benchmark circuit; it only builds, freezes and plans.
    ([builds/snapshot.py](../src/benchpress_compare/builds/snapshot.py)). The baseline
    snapshot goes into the shared store. Later edits to the live source directories
    have no effect on the run.
-3. **Builds**: a `resolve-dependencies` task produces one common dependency lock.
-   Then both arms build concurrently into release wheels and isolated venvs
+3. **Builds**: a `resolve-dependencies` task produces one common dependency lock
+   covering both Qiskit trees' requirements and the runtime dependencies the harness
+   wheel itself declares (read from its metadata, so a `pyproject.toml` change cannot
+   leave the worker environments incomplete). Then both arms build concurrently into release wheels and isolated venvs
    ([builds/release.py](../src/benchpress_compare/builds/release.py)). The paired builds
    must agree on dependencies, Python, platform and toolchain; only the Qiskit source
    may differ. Baseline builds are cached in the store under a content key that
@@ -274,6 +276,10 @@ N2 and D2 are scored separately:
 Reports are written to `results-root/reports/`:
 - `summary.json`: the authoritative model, including `admission`, `failures` and
   `score_without_evolve_failures`.
+- `result.json`: the small machine-readable outcome: `N2`, `D2`, a `state` that says
+  whether they may be used, and an explanation. It is derived from `summary.json`
+  and the live `state/status.json`; `benchpress-compare result` prints it for a run
+  in any phase (see [Read the result from a script](result.md)).
 - `report.md`: the readable summary. It leads with the headline scores, then
   coverage, slices, circuits, the largest changes, failures and diagnostics.
 - `charts/*.svg` and `charts/*.png`: charts drawn from `summary.json` alone
@@ -320,7 +326,7 @@ results-root/
   jobs/                    controller and shard job records
   attempts/                one directory per attempt, with spec, receipt and artifacts
   observations/            committed comparison results (one bundle per arm × observation)
-  reports/                 summary.json, report.md, charts/*.svg|png, cases.csv, observations.csv
+  reports/                 summary.json, result.json, report.md, charts/*.svg|png, cases.csv, observations.csv
 
 store/                     shared across runs
   sources/                 baseline source snapshots

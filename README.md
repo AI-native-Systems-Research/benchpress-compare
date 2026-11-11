@@ -107,7 +107,10 @@ over recipes and circuits.
 When collection finishes, open `<results-root>/reports/report.md` for the readable
 summary. It leads with the headline N2 and D2 scores and embeds the charts
 written to `<results-root>/reports/charts/` as PNG and SVG; `summary.json` next
-to it holds the exact data behind every number.
+to it holds the exact data behind every number. For scripts, `result.json` in
+the same directory reduces all of this to N2, D2 and one state, and
+`benchpress-compare result` prints it for a run in any phase; see
+[Read the result from a script](docs/result.md).
 
 Some failures change which score you get:
 

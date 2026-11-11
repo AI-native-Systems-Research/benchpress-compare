@@ -88,14 +88,14 @@ def test_saved_profile_is_used_when_omitted_and_cannot_be_changed(tmp_path):
         _config(parser().parse_args(["run", "--results-root", str(root), "--profile", "full"]))
 
 
-def test_report_reads_committed_results_without_original_harness(tmp_path, capsys):
+def _committed_run(root):
+    """Freeze a smoke plan with one succeeded observation per arm and case."""
     from itertools import product
 
     from benchpress_compare.identity import canonical_hash
     from benchpress_compare.store import publish_bundle
     from benchpress_compare.weights import LEVELS, TARGETS
 
-    root = tmp_path / "run"
     cases = [
         {
             "case_id": f"c-{target}-{level}",
@@ -114,7 +114,7 @@ def test_report_reads_committed_results_without_original_harness(tmp_path, capsy
         "schema_version": 1,
         "design": "benchpress-smoke-v1",
         "cases": cases,
-        "observations": [{}, {}],
+        "observations": [{} for _ in range(2 * len(cases))],
         "config": {"smoke": ["sample"]},
         "builds": {},
         "bundles": [],
@@ -142,9 +142,61 @@ def test_report_reads_committed_results_without_original_harness(tmp_path, capsy
                     },
                 },
             )
+    return cases
+
+
+def test_report_reads_committed_results_without_original_harness(tmp_path, capsys):
+    root = tmp_path / "run"
+    _committed_run(root)
     assert main(["report", "--results-root", str(root), "--family", "F1"]) == 0
     paths = json.loads(capsys.readouterr().out)
     report = json.loads(open(paths["summary.json"]).read())
     assert report["admission"]["admitted"] == ["sample"]
     assert report["summary"]["metrics"]["N2"]["score"] == 1
     assert report["summary"]["metrics"]["D2"]["circuit_counts"]["same"] == 1
+
+
+def test_result_is_read_only_for_an_absent_root(tmp_path, capsys):
+    root = tmp_path / "absent"
+    assert main(["result", "--results-root", str(root)]) == 0
+    assert not root.exists()
+    output = json.loads(capsys.readouterr().out)
+    assert output["state"] == "not_started"
+    assert output["scored"] is False
+    assert output["N2"] is None and output["D2"] is None
+
+
+def test_result_follows_the_run_state_and_rebuilds_a_missing_report(tmp_path, capsys):
+    import shutil
+
+    root = tmp_path / "run"
+    _committed_run(root)
+    atomic_write_json(
+        root / "state/status.json", {"schema_version": 1, "status": "RUNNING", "updated_at": 1.0}
+    )
+    # Committed observations of a running run are progress, not a score.
+    assert main(["result", "--results-root", str(root)]) == 0
+    running = json.loads(capsys.readouterr().out)
+    assert running["state"] == "running"
+    assert running["scored"] is False
+    assert running["N2"] is None
+    assert running["observations"] == {"planned": 12, "completed": 12, "succeeded": 12}
+    # A report written mid-run carries the same live state.
+    assert main(["report", "--results-root", str(root)]) == 0
+    paths = json.loads(capsys.readouterr().out)
+    assert json.loads(open(paths["result.json"]).read())["state"] == "running"
+    atomic_write_json(
+        root / "state/status.json", {"schema_version": 1, "status": "COMPLETE", "updated_at": 2.0}
+    )
+    assert main(["result", "--results-root", str(root)]) == 0
+    saved = json.loads(capsys.readouterr().out)
+    assert saved["state"] == "complete"
+    assert saved["scored"] is True
+    assert saved["N2"] == 1 and saved["D2"] == 1
+    assert saved["score_scope"] == "smoke"
+    assert saved["updated_at"] == 2.0
+    # Without the saved report the result is rebuilt from the committed observations.
+    shutil.rmtree(root / "reports")
+    assert main(["result", "--results-root", str(root)]) == 0
+    assert json.loads(capsys.readouterr().out) == saved
+    assert not (root / "reports").exists()
