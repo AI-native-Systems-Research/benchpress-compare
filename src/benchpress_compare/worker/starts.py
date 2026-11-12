@@ -23,6 +23,14 @@ SOURCE_FILE = "crates/transpiler/src/passes/sabre/layout.rs"
 REVIEWED_SOURCE_HASHES = {
     # Identical in the supplied baseline and evolve Qiskit 2.6 source snapshots.
     "429cd7803bdf2c005ce2469834ed60de12d2726df4f537d70e5cff697182b140",
+    # Depth-aware SABRE layout-trial tie-break (under evaluation). Differs from the
+    # reviewed baseline above only in the layout-trial selection key in
+    # sabre_layout_and_routing: min_by_key(swap_count, index) becomes
+    # min_by_key((swap_count, estimated_2q_depth), index). The implicit start
+    # templates are byte-identical (dense / ascending / descending and the
+    # 127 / 133 / 156 ring blocks reconstructed below), so reviewed_start_source
+    # and native_start_templates are unaffected.
+    "0420afb21811087bf20cf9a410da5e65380a035066a066295d7e0b35c8ae296a",
 }
 START_PROTOCOL = "source-attested-sabre-start-templates-v1"
 
